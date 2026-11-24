@@ -72,6 +72,8 @@ internal sealed partial class MainForm : Form
     // lock screen
     private readonly Panel _lockPanel = new() { Dock = DockStyle.Fill, BackColor = Theme.Window, Visible = false };
     private readonly TextBox _lockPassword = Theme.TextBox("Senha mestra");
+    private UiButton _lockButton = null!;
+    private void UpdateLockButton() => _lockButton.Visible = _vault?.HasPassword == true;
     private readonly Label _lockError = new() { AutoSize = true, ForeColor = Theme.Expired };
 
     private readonly System.Windows.Forms.Timer _saveTimer = new() { Interval = 800 };
@@ -158,7 +160,9 @@ internal sealed partial class MainForm : Form
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.Controls.Add(categories, 0, 0);
-        header.Controls.Add(Theme.Button("Bloquear", async (_, _) => await LockAsync(), ButtonKind.Ghost), 1, 0);
+        // Only while a master password is set (without one there is nothing to lock).
+        _lockButton = Theme.Button("Bloquear", async (_, _) => await LockAsync(), ButtonKind.Ghost);
+        header.Controls.Add(_lockButton, 1, 0);
         var settings = Theme.Button("Configurações", (_, _) => { }, ButtonKind.Ghost);
         settings.Icon = UiIcon.ChevronDown;
         settings.IconAfterText = true;
@@ -250,16 +254,8 @@ internal sealed partial class MainForm : Form
             _settingsMenu.Items.Clear();
             if (_vault is null) { e.Cancel = true; return; }
             var s = _vault.Settings;
-            if (_vault.HasPassword)
-            {
-                _settingsMenu.Items.Add("Alterar senha mestra…", null, (_, _) => ChangePassword());
-                _settingsMenu.Items.Add("Remover senha mestra…", null, (_, _) => RemovePassword());
-                _settingsMenu.Items.Add($"Bloqueio automático: {(s.AutoLockMinutes == 0 ? "desligado" : s.AutoLockMinutes + " min")}…", null, (_, _) => EditNumber("Bloqueio automático", "Minutos sem uso até bloquear (0 = nunca):", s.AutoLockMinutes, 0, 1440, v => s.AutoLockMinutes = v));
-            }
-            else
-            {
-                _settingsMenu.Items.Add("Definir senha mestra (recomendado)…", null, (_, _) => SetPassword());
-            }
+            // The master password is only there to be removed (the vault stays encrypted by Windows without it).
+            if (_vault.HasPassword) _settingsMenu.Items.Add("Remover senha mestra…", null, (_, _) => RemovePassword());
             _settingsMenu.Items.Add($"Contas abertas ao mesmo tempo: {s.LiveSessions}…", null, (_, _) => EditNumber("Contas abertas", "Quantas contas ficam abertas em memória para troca instantânea (1–20). Mais contas = mais memória.", s.LiveSessions, 1, 20, v => { s.LiveSessions = v; _browser.LiveSessions = v; }));
             _settingsMenu.Items.Add($"Verificar sessões a cada: {s.RecheckMinutes} min…", null, (_, _) => EditNumber("Verificação", "Intervalo, em minutos, entre verificações automáticas das sessões (5–1440):", s.RecheckMinutes, 5, 1440, v => s.RecheckMinutes = v));
             _settingsMenu.Items.Add("Atualizar saldos de todas as contas", null, async (_, _) => await RefreshAllFinanceAsync());
@@ -356,6 +352,7 @@ internal sealed partial class MainForm : Form
         _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); SaveNow(); };
         _idleTimer.Tick += async (_, _) =>
         {
+            UpdateLockButton();
             if (_vault is { HasPassword: true, Settings.AutoLockMinutes: > 0 } v && Native.IdleTime() >= TimeSpan.FromMinutes(v.Settings.AutoLockMinutes))
                 await LockAsync();
         };
@@ -394,6 +391,7 @@ internal sealed partial class MainForm : Form
         // Start in the account search, not on the first toolbar button (whose focus ring looked like a pressed button).
         if (!_lockPanel.Visible) ActiveControl = _searchBox.Box;
         _idleTimer.Start();
+        UpdateLockButton();
         _recheckTimer.Start();
         _financeTimer.Start();
         if (_vault is { } v)
@@ -729,7 +727,8 @@ internal sealed partial class MainForm : Form
             p => _vault.CheckPassword(p) ? null : "Senha incorreta.");
         if (current is null) return;
         _vault.SetPassword(null);
-        SetStatus("Senha mestra removida.");
+        UpdateLockButton();
+        SetStatus("Senha mestra removida: o app abre direto, sem bloqueio.");
     }
 
     private void EditNumber(string title, string label, int current, int min, int max, Action<int> apply)
