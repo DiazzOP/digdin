@@ -7,21 +7,24 @@ body{font-family:sans-serif;display:flex;gap:40px}.grid{display:grid;grid-templa
      cards = picture + name + RAP, serial only on some, "Sua oferta" / "Seu pedido" columns where the selected item appears. -->
 <main><header><a href="https://example.invalid/users/9/profile">Beta</a></header>
 <section id="mine"><h2>Seu inventário</h2><button>Tudo</button><div class="grid"></div>
-  <div class="pager"><button class="prev" data-k="prev" aria-label="Página anterior">‹</button><span>Página 1</span><button class="next" data-k="next" aria-label="Próxima página">›</button></div></section>
+  <div class="pager"><button class="prev" data-k="prev" aria-label="Voltar">‹</button><span>Página 1</span><button class="next" data-k="next" aria-label="Próximo">›</button></div></section>
 <section id="theirs"><h2>Inventário de sigma2</h2><button>Tudo</button><div class="grid"></div>
-  <div class="pager"><button class="prev" data-k="prev" aria-label="Página anterior">‹</button><span>Página 1</span><button class="next" data-k="next" aria-label="Próxima página">›</button></div></section>
+  <div class="pager"><button class="prev" data-k="prev" aria-label="Voltar">‹</button><span>Página 1</span><button class="next" data-k="next" aria-label="Próximo">›</button></div></section>
 </main>
 <aside><h2>Sua oferta</h2><div class="drop" id="offer"></div><button>Adicionar mais Robux</button><div>Valor total: 0</div>
   <h2>Seu pedido</h2><div class="drop" id="request"></div><button id="send" onclick="window.sent=true">Fazer oferta</button></aside>
 <script>
 window.clicks=[];
+const MODE=new URLSearchParams(location.search).get('mode');
+const LATE = ['late','search'].includes(MODE), SEARCH = MODE==='search';
 const lists={mine:[['Black Headphones',null,3130],['Tiny Tank Egg',null,211],['Tiny Tank Egg',null,211],['Saber Boss Egg',null,198],['Deteggctive W. Wolf',null,198],
   ['Deteggctive W. Wolf',null,198],['Eggcient Woolly Mammoth',null,184],['Eggcient Woolly Mammoth',null,184],['Tallaheggsee, Zombie Slayer',null,198],['Rocket Eggscape',null,195],
   ['Old Hat',null,100],['Camo Commando',2710,3051]],
   theirs:[['Verdant Crown',1117834,2958],['Deteggctive W. Wolf',null,198],['Bighead',null,3014]]};
 const PER=10;
 function render(side){const sec=document.getElementById(side),g=sec.querySelector('.grid'),p=sec.dataset.page|0;g.innerHTML='';
-  lists[side].slice(p*PER,p*PER+PER).forEach(([n,ser,rap],i)=>{const k=side+(p*PER+i),t=document.createElement('div');t.className='tile'+(window[k]?' on':'');
+  const q=sec.dataset.q||'', all=lists[side].map((x,i)=>[...x,i]).filter(x=>!q||x[0].toLowerCase().includes(q));
+  all.slice(p*PER,p*PER+PER).forEach(([n,ser,rap,i])=>{const k=side+i,t=document.createElement('div');t.className='tile'+(window[k]?' on':'');
     t.innerHTML='<div class="thumb"><img width=60 height=60><span class="check">✓</span>'+(ser?'<span>#'+ser+'</span>':'')+'</div><div class="name">'+n+'</div><div>⏣'+rap+'</div>';
     t.querySelector('.thumb').onclick=()=>{window.clicks.push(side+':'+n);
       // mode=toggle (the real page of 24/11): clicking a selected card takes it back out; selecting only adds a ✓ overlay
@@ -35,13 +38,21 @@ function render(side){const sec=document.getElementById(side),g=sec.querySelecto
       c.querySelector('.thumb').onclick=()=>{window.clicks.push('REMOVED:'+n);c.remove();window[k]=0;t.classList.remove('on')};
       document.getElementById(side==='mine'?'offer':'request').appendChild(c)};
     g.appendChild(t)});
-  sec.querySelector('[data-k=next]').disabled=(p+1)*PER>=lists[side].length;sec.querySelector('[data-k=prev]').disabled=p===0;sec.querySelector('.pager span').textContent='Página '+(p+1)}
+  sec.querySelector('[data-k=next]').disabled=(p+1)*PER>=all.length;sec.querySelector('[data-k=prev]').disabled=p===0;sec.querySelector('.pager span').textContent='Página '+(p+1)}
 for(const side of ['mine','theirs']){const sec=document.getElementById(side);
-  sec.querySelector('[data-k=next]').onclick=()=>{sec.dataset.page=(sec.dataset.page|0)+1;render(side)};
-  sec.querySelector('[data-k=prev]').onclick=()=>{sec.dataset.page=Math.max(0,(sec.dataset.page|0)-1);render(side)}}
+  const go=d=>{sec.dataset.page=Math.max(0,(sec.dataset.page|0)+d);
+    if(LATE){sec.querySelector('.pager span').textContent='Página '+((sec.dataset.page|0)+1);setTimeout(()=>render(side),1500)} else render(side)};
+  // mode=pointer: the arrows answer pointer events only, not a plain click.
+  if(MODE==='pointer'){sec.querySelector('[data-k=next]').onpointerup=()=>go(1);sec.querySelector('[data-k=prev]').onpointerup=()=>go(-1)}
+  else{sec.querySelector('[data-k=next]').onclick=()=>go(1);sec.querySelector('[data-k=prev]').onclick=()=>go(-1)}
+  // The search (magnifier): an input that filters the whole inventory, results 1 s later.
+  if(SEARCH){const b=document.createElement('button');b.setAttribute('aria-label','Pesquisar');b.textContent='🔍';sec.insertBefore(b,sec.querySelector('.grid'));
+    b.onclick=()=>{if(sec.querySelector('input'))return;const i=document.createElement('input');i.type='text';sec.insertBefore(i,sec.querySelector('.grid'));
+      i.addEventListener('input',()=>{const q=i.value.toLowerCase();clearTimeout(i.t);i.t=setTimeout(()=>{sec.dataset.q=q;sec.dataset.page=0;render(side)},1000)})}}}
 // mode=slow: like a tab opened just now — your inventory at 0.8 s, the partner's only at 4 s.
 const SLOW = new URLSearchParams(location.search).get('mode')==='slow';
 const TOGGLE = new URLSearchParams(location.search).get('mode')==='toggle';
+
 // mode=bare (the real page of 24/11): the page arrows are icons only — no class, label or text that says next/previous.
 if (new URLSearchParams(location.search).get('mode')==='bare')
   document.querySelectorAll('.pager button').forEach(b=>{b.removeAttribute('class');b.removeAttribute('aria-label');b.innerHTML='<svg width="12" height="12"><path d="M2 2L8 6L2 10"/></svg>'});

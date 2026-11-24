@@ -41,11 +41,53 @@
     } finally { window.removeEventListener('click', stopNav, true); }
   }
 
-  // Tabs and page arrows: never a send/accept/decline control.
-  function clickControl(el) {
+  // Tabs and page arrows: never a send/accept/decline control. `full`: the pointer/mouse sequence too (the page's
+  // newer buttons answer pointer events, not a plain click).
+  function clickControl(el, full) {
     if (!el || NEVER.test(safeText(el))) return false;
-    press(el, false);
+    press(el, !!full);
     return true;
+  }
+
+  // The names of the cards on screen (to see a new page arrive, not only its label).
+  const cardNames = () => [...document.querySelectorAll('[title], [class*="item-card-name" i], [class*="name" i]')]
+    .filter(el => vis(el) && !el.children.length).map(el => norm(el.getAttribute('title') || el.textContent)).join('|');
+
+  // Waits for `pred` up to `ms`.
+  async function until(pred, ms) {
+    for (const end = Date.now() + ms; Date.now() < end; ) { if (pred()) return true; await sleep(200); }
+    return pred();
+  }
+
+  // The inventory's own search (magnifier, "Pesquisar"): type the item's name and let the page filter every page.
+  const setInput = (input, value) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const searched = new Set();
+  function searchInput(want) {
+    return [...document.querySelectorAll('input')].find(i => vis(i) && ['text', 'search', ''].includes((i.getAttribute('type') || '').toLowerCase()) && zoneOf(i) === want);
+  }
+  async function viaSearch(it, side, taken) {
+    const want = side === 'give' ? 'mine' : 'partner';
+    let input = searchInput(want);
+    if (!input) {
+      const btn = [...document.querySelectorAll('button, [role="button"]')]
+        .find(b => vis(b) && /(pesquisar|search|buscar|procurar)/i.test(safeText(b)) && zoneOf(b) === want);
+      if (!btn || !clickControl(btn)) return null;
+      if (!await until(() => searchInput(want), 2000)) { clickControl(btn, true); await until(() => searchInput(want), 2000); }
+      input = searchInput(want);
+    }
+    if (!input) return null;
+    searched.add(input);
+    input.focus();
+    setInput(input, it.name);
+    // The filtered list comes from the server: wait for the card (or for the list to settle).
+    let r = null;
+    await until(() => { r = pick(it, side, taken); return !!(r.card || r.count > 1); }, 6000);
+    if (!(r && (r.card || r.count > 1))) { await settle(3000); r = pick(it, side, taken); }
+    return r;
   }
 
   // A card is clicked on its picture, so the click bubbles up to whatever handler the page put on the card. The guard
@@ -206,16 +248,21 @@
     if (r.card || r.count > 1) return r;
     const tab = tabFor(side);
     if (tab && clickControl(tab)) { await sleep(1200); r = pick(it, side, taken); if (r.card || r.count > 1) return r; }
+    // The inventory's search first: it looks at every page at once.
+    const s = await viaSearch(it, side, taken);
+    if (s && (s.card || s.count > 1)) return s;
     // Forward to the last page, then back to the first: every page of that inventory is looked at once.
     for (const dir of ['next', 'prev']) {
       for (let page = 0; page < 1000 && !late(); page++) {
-        const b = arrows(dir, side)[0], before = pageText();
+        const b = arrows(dir, side)[0], before = pageText(), cards = cardNames();
         if (!b || !clickControl(b)) break;
-        // Wait for the next page to show (up to 4 s); nothing changed: first or last page.
-        let moved = false;
-        for (const until = Date.now() + 4000; Date.now() < until && !moved; ) { await sleep(200); moved = pageText() !== before; }
-        if (!moved) break;
-        await sleep(300);
+        // Wait for the next page (up to 4 s); a plain click that did nothing gets the pointer sequence once.
+        let moved = await until(() => pageText() !== before, 4000);
+        if (!moved && clickControl(b, true)) moved = await until(() => pageText() !== before, 4000);
+        if (!moved) break; // first or last page
+        // The label can change before the cards: wait for the cards themselves, then for the page to settle.
+        await until(() => cardNames() !== cards, 5000);
+        await settle(3000);
         r = pick(it, side, taken);
         if (r.card || r.count > 1) return r;
       }
@@ -307,6 +354,7 @@
       for (const c of cardsFor(it)) if (!beforeCards.includes(c)) taken.add(c);
       (ok ? R.selected : R.unconfirmed).push(label(it));
     }
+    for (const input of searched) if (document.contains(input) && input.value) setInput(input, '');
     R.notes = [...new Set(R.notes)];
     if (R.missing.length || R.ambiguous.length || R.unconfirmed.length) R.structure = structure();
   } catch (e) {
