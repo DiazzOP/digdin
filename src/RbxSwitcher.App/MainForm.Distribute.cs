@@ -193,6 +193,7 @@ internal sealed partial class MainForm
                 if (a.Inventory?.LastAttemptUtc is not { } at || DateTimeOffset.UtcNow - at > TimeSpan.FromMinutes(2))
                     await RefreshInventoryAsync(a, force: true);
                 await ReadSalesAsync(a, force: true);
+                await ReadArrivalsAsync(a); // when held Smalls and Limiteds leave the hold
                 await Task.Delay(500);
             }
             await EnsureMarketAsync();
@@ -641,6 +642,51 @@ internal sealed partial class MainForm
         }
     }
 
+    /// <summary>
+    /// "Libera qua, 26/11 às 18:45": for a step that waits, when each held copy it needs leaves the hold (2 days after a
+    /// trade, 7 after a store purchase), and so when "Abrir trade" turns on.
+    /// </summary>
+    private string? ReleaseNote(PlanStep step, Dictionary<long, DateTimeOffset> accepted, DateTimeOffset now)
+    {
+        var parts = new List<string>();
+        DateTimeOffset? opens = null;
+        bool unknown = false;
+        void Add(long accountId, CopyRef c)
+        {
+            var acct = _vault!.Accounts.Find(accountId);
+            var inv = acct?.Inventory;
+            var copy = inv?.Copies.FirstOrDefault(k => k.UserAssetId == c.UserAssetId);
+            if (copy is null)
+            {
+                // Not there yet: a Small another trade of the plan brings.
+                var from = Plan.Steps.FirstOrDefault(x => x.Id != step.Id && x.SourceSmall?.UserAssetId == c.UserAssetId && x.IsOpenForWork);
+                parts.Add($"{c.Name} chega com a {from?.Id ?? "outra trade do plano"} e libera 2 dias depois que ela for concluída");
+                unknown = true;
+                return;
+            }
+            if (!inv!.IsOnHold(copy)) return;
+            var h = HoldClock.ForAccount(inv.Copies.Where(inv.IsOnHold), acct!.Arrivals, accepted, now).GetValueOrDefault(copy.UserAssetId);
+            if (h is null) { parts.Add($"{c.Name}: data de liberação ainda desconhecida (o app lê as trades e compras de @{acct.Username})"); unknown = true; return; }
+            string when = h.Kind is null ? $"{WhenText(h.EarliestUtc)} se veio por trade ou {WhenText(h.LatestUtc)} se foi comprado"
+                : h.IsRange ? $"entre {WhenText(h.EarliestUtc)} e {WhenText(h.LatestUtc)}" : WhenText(h.LatestUtc);
+            parts.Add($"{c.Name} libera {when}");
+            if (opens is null || h.LatestUtc > opens) opens = h.LatestUtc;
+        }
+        if (step.WaitsForSmall && step.DestinationSmall is { } ds) Add(step.DestinationId, ds);
+        if (step.WaitsForRelease) foreach (var c in step.Limiteds) Add(step.SourceId, c);
+        if (parts.Count == 0) return null;
+        string tail = unknown || opens is null ? "" : opens <= now ? " Já deve estar liberado: use \"Atualizar leituras\"." : $" \"Abrir trade\" liga {WhenText(opens.Value)} (depois de \"Atualizar leituras\").";
+        return string.Join("; ", parts) + "." + tail;
+    }
+
+    /// <summary>"qua, 26/11 às 18:45" (Brasília).</summary>
+    private static string WhenText(DateTimeOffset utc)
+    {
+        var b = BrasiliaTime.ToBrasilia(utc);
+        var br = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
+        return b.ToString("ddd", br).TrimEnd('.') + ", " + b.ToString("dd/MM", br) + " às " + b.ToString("HH:mm", br);
+    }
+
     // ───────────── screen ─────────────
 
     private void UpdateDistribute(bool force = false)
@@ -700,13 +746,15 @@ internal sealed partial class MainForm
             : null;
         var salesDict = _vault.Accounts.All.Where(a => a.Sales is not null).ToDictionary(a => a.UserId, a => a.Sales!);
         var (sales, delivered) = SalesMatcher.Match(Plan, snaps, salesDict);
-        var steps = Plan.Steps.Select(x => new StepView(x, x.State == StepState.Suggested ? Planner.ReadyCheck(x, input, Plan) : [])).ToList();
+        var accepted = AcceptedTrades();
+        var steps = Plan.Steps.Select(x => new StepView(x, x.State == StepState.Suggested ? Planner.ReadyCheck(x, input, Plan) : [],
+            x.State == StepState.Suggested && (x.WaitsForSmall || x.WaitsForRelease) ? ReleaseNote(x, accepted, now) : null)).ToList();
         var state = new DistributeState(summary, Plan.BuiltUtc is { } b ? $"sugestões de {Fmt.Time(b)}" : "sugestões ainda não geradas",
             warning, configured, _distributeBusy, steps, Plan.Exclusions, delivered, sales)
         { Destinations = destViews.OrderByDescending(d => d.Space ?? -1).ToList() };
 
         string sig = string.Join("|", summary, state.PlanInfo, warning, _distributeBusy,
-            string.Join(",", steps.Select(v => $"{v.Step.Id}:{v.Step.State}:{string.Join("/", v.Problems)}:{v.Step.Attention}:{v.Step.History.Count}:{v.Step.Net}:" +
+            string.Join(",", steps.Select(v => $"{v.Step.Id}:{v.Release}:{v.Step.State}:{string.Join("/", v.Problems)}:{v.Step.Attention}:{v.Step.History.Count}:{v.Step.Net}:" +
                 $"{string.Join("+", v.Step.AllCopies().Select(c => c.UserAssetId))}:{v.Step.WaitsForRelease}:{v.Step.WaitsForSmall}:{v.Step.TradeId}:{string.Join("/", v.Step.Why)}")),
             string.Join(",", Plan.Exclusions.Select(e => $"{e.Copy.UserAssetId}:{e.Why}")), string.Join(",", destViews), sales.Count, string.Join(",", delivered.Select(d => d.State)));
         if (!force && sig == _distributeSignature) return; // nothing changed: keep the scroll position

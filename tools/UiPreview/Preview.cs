@@ -171,6 +171,8 @@ internal static class Preview
             itemThumbs["a" + id] = Thumb(new AvatarItem(ItemKind.Asset, id, name, 8, 0, null, null, true));
         Call(form, "ShowView", 3);
         await Task.Delay(800);
+        // The held Fedora was bought on the store 2 days ago: its step shows when it is released.
+        accounts[0].Arrivals = new() { Items = [new("p1", RbxSwitcher.Core.Limiteds.ArrivalKind.Purchase, 2, null, null, "Sparkle Time Fedora", DateTimeOffset.UtcNow.AddDays(-2).AddHours(-3), true)] };
         Call(form, "GeneratePlan", true);
         await Task.Delay(800);
         Shot(form, "8a-distribuir-sugestoes");
