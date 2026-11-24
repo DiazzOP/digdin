@@ -643,13 +643,15 @@ internal sealed partial class MainForm
     }
 
     /// <summary>
-    /// "Libera qua, 26/11 às 18:45": for a step that waits, when each held copy it needs leaves the hold (2 days after a
-    /// trade, 7 after a store purchase), and so when "Abrir trade" turns on.
+    /// For a step that waits on a hold: a short status ("Small libera qui 26/11, 18:27", "≈" when estimated) and the full
+    /// explanation for its tooltip — when each copy leaves the hold (2 days after a trade, 7 after a store purchase).
     /// </summary>
-    private string? ReleaseNote(PlanStep step, Dictionary<long, DateTimeOffset> accepted, DateTimeOffset now)
+    private (string Short, string Full)? ReleaseNote(PlanStep step, Dictionary<long, DateTimeOffset> accepted, DateTimeOffset now)
     {
         var parts = new List<string>();
         DateTimeOffset? opens = null;
+        bool estimated = false;
+        string? waitsFor = null;  // an incoming Small: the step it comes with
         bool unknown = false;
         void Add(long accountId, CopyRef c)
         {
@@ -658,34 +660,39 @@ internal sealed partial class MainForm
             var copy = inv?.Copies.FirstOrDefault(k => k.UserAssetId == c.UserAssetId);
             if (copy is null)
             {
-                // Not there yet: a Small another trade of the plan brings.
                 var from = Plan.Steps.FirstOrDefault(x => x.Id != step.Id && x.SourceSmall?.UserAssetId == c.UserAssetId && x.IsOpenForWork);
-                parts.Add($"{c.Name} chega com a {from?.Id ?? "outra trade do plano"} e libera 2 dias depois que ela for concluída");
-                unknown = true;
+                waitsFor = from?.Id ?? "outra etapa";
+                parts.Add($"{c.Name} chega com a {waitsFor} e sai do holding 2 dias depois que ela for concluída.");
                 return;
             }
             if (!inv!.IsOnHold(copy)) return;
             var h = HoldClock.ForAccount(inv.Copies.Where(inv.IsOnHold), acct!.Arrivals, accepted, now).GetValueOrDefault(copy.UserAssetId);
-            if (h is null) { parts.Add($"{c.Name}: data de liberação ainda desconhecida (o app lê as trades e compras de @{acct.Username})"); unknown = true; return; }
-            string when = h.Kind is null ? $"{WhenText(h.EarliestUtc)} se veio por trade ou {WhenText(h.LatestUtc)} se foi comprado"
-                : h.IsRange ? $"entre {WhenText(h.EarliestUtc)} e {WhenText(h.LatestUtc)}" : WhenText(h.LatestUtc);
-            parts.Add($"{c.Name} libera {when}");
-            if (opens is null || h.LatestUtc > opens) opens = h.LatestUtc;
+            if (h is null) { unknown = true; parts.Add($"{c.Name}: data ainda desconhecida (o app lê as trades e compras de @{acct.Username})."); return; }
+            // The date shown is when it is surely out; a trade the app did not see accepted, or an unknown origin, is an estimate.
+            var at = h.Kind is null ? h.EarliestUtc : h.LatestUtc;
+            if (!h.Exact || h.Kind is null) estimated = true;
+            parts.Add(h.Kind is null ? $"{c.Name}: {Long(h.EarliestUtc)} se veio por trade, {Long(h.LatestUtc)} se foi comprado."
+                : h.IsRange ? $"{c.Name}: entre {Long(h.EarliestUtc)} e {Long(h.LatestUtc)}."
+                : $"{c.Name}: {Long(h.LatestUtc)} ({(h.Kind == ArrivalKind.Purchase ? "7 dias após a compra" : "2 dias após a trade")}).");
+            if (opens is null || at > opens) opens = at;
         }
-        if (step.WaitsForSmall && step.DestinationSmall is { } ds) Add(step.DestinationId, ds);
+        bool small = step.WaitsForSmall && step.DestinationSmall is not null;
+        if (small) Add(step.DestinationId, step.DestinationSmall!);
         if (step.WaitsForRelease) foreach (var c in step.Limiteds) Add(step.SourceId, c);
         if (parts.Count == 0) return null;
-        string tail = unknown || opens is null ? "" : opens <= now ? " Já deve estar liberado: use \"Atualizar leituras\"." : $" \"Abrir trade\" liga {WhenText(opens.Value)} (depois de \"Atualizar leituras\").";
-        return string.Join("; ", parts) + "." + tail;
+        string who = small && !step.WaitsForRelease ? "Small libera" : "Libera";
+        string shortText = waitsFor is not null ? $"Small chega com a {waitsFor}"
+            : unknown || opens is null ? (small ? "Aguardando Small" : "Aguardando liberação")
+            : opens <= now ? $"{who}: atualize as leituras"
+            : $"{who} {(estimated ? "≈ " : "")}{Short(opens.Value)}";
+        return (shortText, string.Join("\n", parts) + "\n\"Abrir trade\" liga depois de \"Atualizar leituras\" confirmar a liberação.");
     }
 
-    /// <summary>"qua, 26/11 às 18:45" (Brasília).</summary>
-    private static string WhenText(DateTimeOffset utc)
-    {
-        var b = BrasiliaTime.ToBrasilia(utc);
-        var br = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
-        return b.ToString("ddd", br).TrimEnd('.') + ", " + b.ToString("dd/MM", br) + " às " + b.ToString("HH:mm", br);
-    }
+    private static readonly System.Globalization.CultureInfo PtBr = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
+    /// <summary>"qui 26/11, 18:27" (Brasília).</summary>
+    private static string Short(DateTimeOffset utc) { var b = BrasiliaTime.ToBrasilia(utc); return $"{b.ToString("ddd", PtBr).TrimEnd('.')} {b:dd/MM}, {b:HH:mm}"; }
+    /// <summary>"qui, 26/11 às 18:27" (Brasília).</summary>
+    private static string Long(DateTimeOffset utc) { var b = BrasiliaTime.ToBrasilia(utc); return $"{b.ToString("ddd", PtBr).TrimEnd('.')}, {b:dd/MM} às {b:HH:mm}"; }
 
     // ───────────── screen ─────────────
 

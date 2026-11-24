@@ -3,8 +3,9 @@ using RbxSwitcher.Core.Limiteds;
 namespace RbxSwitcher.App.UI;
 
 /// <summary>A step as the screen shows it: the step plus the result of the "ready" check made just now.</summary>
-/// <param name="Release">For a step waiting on a hold: when each copy it waits for is released, and when the step can open.</param>
-internal sealed record StepView(PlanStep Step, IReadOnlyList<string> Problems, string? Release = null);
+/// <param name="Release">For a step waiting on a hold: the short date for its status ("Small libera qui 26/11, 18:27") and the full
+/// explanation (tooltip).</param>
+internal sealed record StepView(PlanStep Step, IReadOnlyList<string> Problems, (string Short, string Full)? Release = null);
 
 /// <summary>Everything the "Distribuir" page shows, computed by MainForm.</summary>
 internal sealed record DistributeState(
@@ -180,6 +181,7 @@ internal sealed class DistributeView : Panel
 
     private static (string Word, Color Dot, Color Ink) Look(StepView v) => v.Step.State switch
     {
+        StepState.Suggested when v.Release is { } r => (r.Short, Theme.Warning, Theme.WarnInk),
         StepState.Suggested when v.Step.WaitsForRelease => ("Aguardando liberação", Theme.Warning, Theme.WarnInk),
         StepState.Suggested when v.Step.WaitsForSmall => ("Aguardando Small", Theme.Warning, Theme.WarnInk),
         StepState.Suggested when v.Problems.Count == 0 => ("Pronta para trade", Theme.Valid, Theme.OkInk),
@@ -201,6 +203,7 @@ internal sealed class DistributeView : Panel
         head.Controls.Add(new Label { Text = $"{st.Id} · @{st.SourceName} → @{st.DestinationName}", AutoSize = true, Font = Theme.Title, ForeColor = Theme.Text, Margin = new Padding(0, 3, 12, 0) });
         var status = new StatusText { Font = Theme.Bold, Margin = new Padding(0, 3, 0, 0) };
         status.Set(word, dot, ink);
+        if (v.Release is { } rel) { _tip.SetToolTip(status, rel.Full); status.AccessibleName = rel.Full; }
         head.Controls.Add(status);
         string meta = $"líquido {Fmt.N(st.Net)}" + (st.TradeId is { } tid ? $" · trade {tid}" : "");
         head.Controls.Add(new Label { Text = meta, AutoSize = true, Font = Theme.Small, ForeColor = Theme.TextDim, Margin = new Padding(12, 6, 0, 0) });
@@ -223,12 +226,7 @@ internal sealed class DistributeView : Panel
 
         // What needs a look stays in view; the reasons and the history are one click away.
         if (st.Attention is { } att) card.Controls.Add(new NoteLabel { Text = att, Kind = NoteKind.Warn, Margin = new Padding(0, 6, 0, 4) });
-        else if (st.State == StepState.Suggested && v.Release is { } release)
-        {
-            // Waiting on a hold: the dates, then whatever else is left to check.
-            var others = v.Problems.Where(p => !p.Contains("holding") && !p.Contains("vai chegar")).ToList();
-            card.Controls.Add(new NoteLabel { Text = release + (others.Count > 0 ? " Antes de abrir também: " + string.Join("; ", others) + "." : ""), Kind = NoteKind.Info, Margin = new Padding(0, 6, 0, 4) });
-        }
+        else if (st.State == StepState.Suggested && v.Release is not null) { } // the date is in the status; details in its tooltip
         else if (st.State == StepState.Suggested && v.Problems.Count > 0)
             card.Controls.Add(new NoteLabel { Text = "Antes de abrir: " + string.Join("; ", v.Problems) + (st.WaitsForRelease || st.WaitsForSmall
                 ? ". \"Abrir trade\" liga quando a cópia sair do holding (\"Atualizar leituras\" confere)."
