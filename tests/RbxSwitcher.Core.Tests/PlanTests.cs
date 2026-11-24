@@ -100,6 +100,23 @@ public class PlannerTests
     }
 
     [Fact]
+    public void A_second_source_waits_for_the_Small_the_first_trade_brings_to_a_destination_with_only_one()
+    {
+        // 24/11: kubapw72 had one free Small; Alfa's trade took it and Beta's copies were left out.
+        var s = PlanFixture.Settings((PlanFixture.Kuba, 20_000));
+        var alfa = Acc(PlanFixture.Alfa, "FonteAlfa", null, C(101, 1, "Valk", 3_000), C(103, 4, "Epic Egg", 300), C(104, 5, "Wolf", 450));
+        var beta = Acc(PlanFixture.Beta, "fonte_beta", null, C(201, 6, "Hat", 1_000));
+        var kuba = Acc(PlanFixture.Kuba, "altconta72", "Alts", C(301, 4, "Epic Egg", 300));
+        var plan = Planner.Build(new PlanInput([alfa, beta, kuba], s, PlanFixture.Market, Now), new DistributionPlan());
+        var first = plan.Steps.Single(x => x.SourceId == PlanFixture.Alfa);
+        var second = plan.Steps.Single(x => x.SourceId == PlanFixture.Beta);
+        Assert.False(first.WaitsForSmall);
+        Assert.Equal(first.SourceSmall!.UserAssetId, second.DestinationSmall!.UserAssetId);  // the Small Alfa sends
+        Assert.True(second.WaitsForSmall);
+        Assert.Contains(second.Why, w => w.Contains("chega com outra trade deste plano"));
+    }
+
+    [Fact]
     public void Destinations_chosen_one_by_one_are_the_only_ones_that_receive()
     {
         var s = PlanFixture.Settings();

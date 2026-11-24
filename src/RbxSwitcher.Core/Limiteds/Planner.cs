@@ -55,7 +55,8 @@ public static class Planner
         var now = input.Now;
         var plan = new DistributionPlan
         {
-            Steps = current.Steps.Where(x => x.State != StepState.Suggested).ToList(),
+            // A suggestion the operator discarded before opening it is not history.
+            Steps = current.Steps.Where(x => x.State != StepState.Suggested && !(x.State == StepState.Discarded && x.OpenedUtc is null && x.TradeId is null)).ToList(),
             NextNumber = current.NextNumber,
             BuiltUtc = now,
             // A discarded copy stays out until brought back; one that left its source (sold, traded) is forgotten.
@@ -177,11 +178,16 @@ public static class Planner
             if (sourceSmallTotal.GetValueOrDefault(src.UserId) - used > s.MinSmallsReserve)
             {
                 step.SourceSmall = CopyRef.From(srcSmalls[used]);
+                // It arrives at the destination with this trade (on hold): a later trade there can wait for it.
+                dest.Smalls.Add(srcSmalls[used] with { OnHold = true });
+                dest.Incoming.Add(srcSmalls[used].Copy.UserAssetId);
                 usedSourceSmalls[src.UserId] = used + 1;
                 step.Why.Add($"Small da origem: {step.SourceSmall.Label} (a origem guarda {P(s.MinSmallsReserve, "Small", "Smalls")} para os saques da AstraFlip).");
             }
             else step.Why.Add($"Sem Small da origem: ela só tem a reserva de {P(s.MinSmallsReserve, "Small liberado", "Smalls liberados")} para os saques da AstraFlip.");
-            step.Why.Add(destSmall.OnHold
+            step.Why.Add(dest.Incoming.Contains(destSmall.Copy.UserAssetId)
+                ? $"Small de @{dest.A.Username}: {destSmall.Copy.Name}, que chega com outra trade deste plano — a etapa espera ele sair do holding."
+                : destSmall.OnHold
                 ? $"Small de @{dest.A.Username}: {destSmall.Copy.Name} ainda está em holding — a etapa espera a liberação."
                 : $"Small de @{dest.A.Username}: {destSmall.Copy.Name}.");
             dest.Remaining -= net;
@@ -232,7 +238,8 @@ public static class Planner
         }
         if (step.DestinationSmall is { } ds)
         {
-            if (!dstCopies.TryGetValue(ds.UserAssetId, out var dc)) problems.Add($"o Small {ds.Label} não está mais em @{dst.Username}");
+            if (!dstCopies.TryGetValue(ds.UserAssetId, out var dc))
+                problems.Add(step.WaitsForSmall ? $"o Small {ds.Label} ainda vai chegar em @{dst.Username} (outra trade do plano)" : $"o Small {ds.Label} não está mais em @{dst.Username}");
             else if (dst.Inventory!.IsOnHold(dc)) problems.Add($"o Small {ds.Label} ainda está em holding");
         }
         if (Space(dst, input.Settings, input.Market, input.Now, Committed(plan, dst.UserId, step.Id), out var view) is not { } space)
@@ -316,6 +323,8 @@ public static class Planner
         public long Before { get; set; }
         public long Remaining { get; set; }
         public List<ValuedCopy> Smalls { get; set; } = [];
+        /// <summary>Smalls another trade of this plan brings (not there yet).</summary>
+        public HashSet<long> Incoming { get; } = [];
         public SpaceView? View { get; set; }
     }
 }

@@ -116,9 +116,13 @@ internal sealed partial class MainForm
                             : "As cópias voltam a ficar livres para o plano."),
                 "Distribuir", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
         var now = DateTimeOffset.UtcNow;
-        step.State = StepState.Discarded;
-        step.Attention = null;
-        step.Log(now, "descartada pelo operador");
+        if (suggestion) Plan.Steps.Remove(step); // never acted on: gone, not history
+        else
+        {
+            step.State = StepState.Discarded;
+            step.Attention = null;
+            step.Log(now, "descartada pelo operador");
+        }
         if (suggestion)
         {
             Plan.Dismiss(step, now);
@@ -655,6 +659,7 @@ internal sealed partial class MainForm
         long readyNet = 0;
         int destCount = 0, destWithSpace = 0;
         long freeSpace = 0;
+        var destViews = new List<DestinationView>();
         DateTimeOffset? oldest = null;
         foreach (var a in planSnaps)
         {
@@ -672,7 +677,18 @@ internal sealed partial class MainForm
             if (role == DistributionRole.Destination)
             {
                 destCount++;
-                if (Planner.Space(a, s, _market, now, Planner.Committed(Plan, a.UserId), out _) is { } sp && sp > 0) { destWithSpace++; freeSpace += sp; }
+                long? space = Planner.Space(a, s, _market, now, Planner.Committed(Plan, a.UserId), out var view);
+                if (space is { } sp && sp > 0) { destWithSpace++; freeSpace += sp; }
+                var mine = a.Inventory is { } di ? Valuation.Value(di, s, _market).Where(v => v.Small && !reserved.Contains(v.Copy.UserAssetId)).ToList() : [];
+                int free = mine.Count(v => !v.OnHold), held = mine.Count(v => v.OnHold);
+                int planned = Plan.Steps.Count(x => x.State == StepState.Suggested && x.DestinationId == a.UserId);
+                string? why = !a.SessionOk ? "sessão expirada"
+                    : space is null ? string.Join("; ", view.Blocks)
+                    : space == 0 ? $"sem espaço: ocupado {Fmt.N(view.Occupied ?? 0)} já chega ao teto {Fmt.N((s.UseSpaceAtSale ? view.CeilingAtSale : view.Ceiling) ?? 0)}"
+                    : free + held == 0 ? "sem Small para mandar na trade"
+                    : free == 0 && planned == 0 ? "só Smalls em holding (a etapa espera)"
+                    : null;
+                destViews.Add(new DestinationView(a.Username, space, free, held, planned, why));
             }
         }
         int Count(params StepState[] st) => Plan.Steps.Count(x => st.Contains(x.State));
@@ -686,12 +702,13 @@ internal sealed partial class MainForm
         var (sales, delivered) = SalesMatcher.Match(Plan, snaps, salesDict);
         var steps = Plan.Steps.Select(x => new StepView(x, x.State == StepState.Suggested ? Planner.ReadyCheck(x, input, Plan) : [])).ToList();
         var state = new DistributeState(summary, Plan.BuiltUtc is { } b ? $"sugestões de {Fmt.Time(b)}" : "sugestões ainda não geradas",
-            warning, configured, _distributeBusy, steps, Plan.Exclusions, delivered, sales);
+            warning, configured, _distributeBusy, steps, Plan.Exclusions, delivered, sales)
+        { Destinations = destViews.OrderByDescending(d => d.Space ?? -1).ToList() };
 
         string sig = string.Join("|", summary, state.PlanInfo, warning, _distributeBusy,
             string.Join(",", steps.Select(v => $"{v.Step.Id}:{v.Step.State}:{string.Join("/", v.Problems)}:{v.Step.Attention}:{v.Step.History.Count}:{v.Step.Net}:" +
                 $"{string.Join("+", v.Step.AllCopies().Select(c => c.UserAssetId))}:{v.Step.WaitsForRelease}:{v.Step.WaitsForSmall}:{v.Step.TradeId}:{string.Join("/", v.Step.Why)}")),
-            string.Join(",", Plan.Exclusions.Select(e => $"{e.Copy.UserAssetId}:{e.Why}")), sales.Count, string.Join(",", delivered.Select(d => d.State)));
+            string.Join(",", Plan.Exclusions.Select(e => $"{e.Copy.UserAssetId}:{e.Why}")), string.Join(",", destViews), sales.Count, string.Join(",", delivered.Select(d => d.State)));
         if (!force && sig == _distributeSignature) return; // nothing changed: keep the scroll position
         _distributeSignature = sig;
         _distributePage.SetState(state);

@@ -9,7 +9,15 @@ internal sealed record StepView(PlanStep Step, IReadOnlyList<string> Problems);
 internal sealed record DistributeState(
     string Summary, string PlanInfo, string? Warning, bool Configured, bool Busy,
     IReadOnlyList<StepView> Steps, IReadOnlyList<Exclusion> Exclusions,
-    IReadOnlyList<DeliveredView> Delivered, IReadOnlyList<SaleView> Sales);
+    IReadOnlyList<DeliveredView> Delivered, IReadOnlyList<SaleView> Sales)
+{
+    /// <summary>Each marked destination, and why it can (or cannot) take a lot now.</summary>
+    public IReadOnlyList<DestinationView> Destinations { get; init; } = [];
+}
+
+/// <param name="Space">Free space now (null: blocked).</param>
+/// <param name="Why">What blocks it, or what limits it (no Small, full).</param>
+internal sealed record DestinationView(string Name, long? Space, int FreeSmalls, int HeldSmalls, int Planned, string? Why);
 
 /// <summary>
 /// The "Distribuir" category: suggested trades (what to send, from where, to whom, with which Smalls, and why), the
@@ -102,7 +110,7 @@ internal sealed class DistributeView : Panel
         _refresh.Text = s.Busy ? "Lendo…" : "Atualizar leituras";
         int Of(params StepState[] st) => s.Steps.Count(v => st.Contains(v.Step.State));
         int? N(int n) => n > 0 ? n : null;
-        _tabs.SetCounts(N(Of(StepState.Suggested)), N(Of(StepState.Opened, StepState.Sent, StepState.NeedsCheck)), N(s.Exclusions.Count), null,
+        _tabs.SetCounts(N(Of(StepState.Suggested)), N(Of(StepState.Opened, StepState.Sent, StepState.NeedsCheck)), N(s.Exclusions.Count(e => !e.Dismissed)), null,
                         N(s.Sales.Count(x => x.Link != SaleLink.NotFromPlan)));
         Render();
     }
@@ -133,8 +141,10 @@ internal sealed class DistributeView : Panel
                 var sug = s.Steps.Where(v => v.Step.State == StepState.Suggested).ToList();
                 if (sug.Count == 0) Empty(s.Configured ? "Nenhuma sugestão agora. Use \"Gerar sugestões\" depois de atualizar as leituras." : "Configure as contas de origem e as destinatárias para começar.");
                 foreach (var v in sug) _list.Controls.Add(StepCard(v));
-                if (s.Exclusions.Count > 0 && sug.Count > 0)
-                    _list.Controls.Add(Hint((s.Exclusions.Count == 1 ? "1 cópia ficou de fora" : $"{Fmt.Count(s.Exclusions.Count, "cópia", "cópias")} ficaram de fora") + " — veja o motivo em \"Ficaram de fora\"."));
+                int left = s.Exclusions.Count(e => !e.Dismissed);
+                if (left > 0 && sug.Count > 0)
+                    _list.Controls.Add(Hint((left == 1 ? "1 cópia ficou de fora" : $"{Fmt.Count(left, "cópia", "cópias")} ficaram de fora") + " — veja o motivo em \"Ficaram de fora\"."));
+                if (s.Configured && s.Destinations.Count > 0) _list.Controls.Add(DestinationsCard(s.Destinations));
                 break;
             case ViewProgress:
                 var prog = s.Steps.Where(v => v.Step.State is StepState.Opened or StepState.Sent or StepState.NeedsCheck).ToList();
@@ -143,6 +153,7 @@ internal sealed class DistributeView : Panel
                 break;
             case ViewLeftOut:
                 if (s.Exclusions.Count == 0) Empty("Nada ficou de fora na última geração.");
+                else if (s.Exclusions.All(e => e.Dismissed)) { Empty("Nada ficou de fora por falta de espaço, Small ou preço."); _list.Controls.Add(ExclusionsCard(s.Exclusions)); }
                 else _list.Controls.Add(ExclusionsCard(s.Exclusions));
                 break;
             case ViewHistory:
@@ -273,19 +284,49 @@ internal sealed class DistributeView : Panel
         return card;
     }
 
+    /// <summary>Every marked destination: free space, Smalls to send, what is planned, and what stops it.</summary>
+    private Control DestinationsCard(IReadOnlyList<DestinationView> dests)
+    {
+        var card = new CardStack { Margin = new Padding(0, 4, 0, 12) };
+        card.Controls.Add(new Label { Text = "Destinatárias", AutoSize = true, Font = Theme.Title, ForeColor = Theme.Text, Margin = new Padding(0, 0, 0, 4) });
+        card.Controls.Add(Line("Cada trade precisa de um Small livre da destinatária. Sem espaço ou sem Small, a conta não recebe nesta rodada.", Theme.TextDim));
+        foreach (var d in dests)
+        {
+            string smalls = d.FreeSmalls == 0 && d.HeldSmalls == 0 ? "nenhum Small" : $"{Fmt.Count(d.FreeSmalls, "Small livre", "Smalls livres")}" + (d.HeldSmalls > 0 ? $" + {d.HeldSmalls} em holding" : "");
+            string text = $"@{d.Name} — " + (d.Space is { } sp ? $"espaço {Fmt.N(sp)} · {smalls}" : "bloqueada") +
+                          (d.Planned > 0 ? $" · {Fmt.Count(d.Planned, "trade sugerida", "trades sugeridas")}" : "") + (d.Why is { } w ? $" · {w}" : "");
+            bool ok = d.Space is > 0 && d.Why is null;
+            card.Controls.Add(Line((ok ? "● " : "○ ") + text, ok ? Theme.Text2 : Theme.WarnInk));
+        }
+        return card;
+    }
+
     private Control ExclusionsCard(IReadOnlyList<Exclusion> items)
     {
         var card = new CardStack();
-        card.Controls.Add(new Label { Text = $"Ficaram de fora ({items.Count})", AutoSize = true, Font = Theme.Title, ForeColor = Theme.Text, Margin = new Padding(0, 0, 0, 6) });
-        if (items.Count(e => e.Dismissed) is var dismissed and > 1)
+        var real = items.Where(e => !e.Dismissed).ToList();
+        var dismissedList = items.Where(e => e.Dismissed).ToList();
+        if (real.Count > 0)
         {
-            var all = Theme.Button($"Voltar todas ao plano ({dismissed})", (_, _) => RestoreAllRequested?.Invoke());
-            all.Margin = new Padding(0, 0, 0, 8);
-            _tip.SetToolTip(all, "Devolve todas as cópias que você descartou e refaz as sugestões.");
-            card.Controls.Add(all);
+            card.Controls.Add(new Label { Text = $"Ficaram de fora ({real.Count})", AutoSize = true, Font = Theme.Title, ForeColor = Theme.Text, Margin = new Padding(0, 0, 0, 6) });
+            card.Controls.Add(Line("Cada cópia de origem que não entrou no plano, com o motivo. \"Preço…\" define um preço manual para o item.", Theme.TextDim));
         }
-        card.Controls.Add(Line("Cada cópia de origem que não entrou no plano, com o motivo. \"Preço…\" define um preço manual para o item; \"Voltar ao plano\" devolve uma cópia que você descartou.", Theme.TextDim));
-        foreach (var e in items.OrderBy(x => !x.Dismissed).Take(150))
+        // What you discarded: one line, out of the count.
+        if (dismissedList.Count > 0)
+        {
+            var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, BackColor = Theme.Card, Margin = new Padding(0, real.Count > 0 ? 0 : 0, 0, 6) };
+            var back = Theme.Button(dismissedList.Count == 1 ? "Voltar ao plano" : "Voltar todas ao plano", (_, _) => RestoreAllRequested?.Invoke(), ButtonKind.Ghost);
+            back.Margin = new Padding(0, 0, 8, 0);
+            _tip.SetToolTip(back, "Devolve as cópias que você descartou e refaz as sugestões.");
+            row.Controls.Add(back);
+            row.Controls.Add(new Label
+            {
+                Text = $"{Fmt.Count(dismissedList.Count, "cópia descartada", "cópias descartadas")} por você e sem outra destinatária: " + string.Join(", ", dismissedList.Take(6).Select(e => e.Copy.Label)) + (dismissedList.Count > 6 ? "…" : ""),
+                AutoSize = true, Font = Theme.Small, ForeColor = Theme.TextDim, Margin = new Padding(0, 8, 0, 0),
+            });
+            card.Controls.Add(row);
+        }
+        foreach (var e in real.Take(150))
         {
             var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, BackColor = Theme.Card, Margin = new Padding(0, 4, 0, 0) };
             var price = e.Dismissed
@@ -296,7 +337,7 @@ internal sealed class DistributeView : Panel
             row.Controls.Add(new Label { Text = $"{e.Copy.Label} · @{e.SourceName} — {e.Why}", AutoSize = true, Font = Theme.Small, ForeColor = Theme.Text2, Margin = new Padding(0, 8, 0, 0) });
             card.Controls.Add(row);
         }
-        if (items.Count > 150) card.Controls.Add(Line($"… e mais {items.Count - 150}", Theme.TextDim));
+        if (real.Count > 150) card.Controls.Add(Line($"… e mais {real.Count - 150}", Theme.TextDim));
         return card;
     }
 
