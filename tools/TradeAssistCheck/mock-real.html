@@ -7,9 +7,9 @@ body{font-family:sans-serif;display:flex;gap:40px}.grid{display:grid;grid-templa
      cards = picture + name + RAP, serial only on some, "Sua oferta" / "Seu pedido" columns where the selected item appears. -->
 <main><header><a href="https://example.invalid/users/9/profile">Beta</a></header>
 <section id="mine"><h2>Seu inventário</h2><button>Tudo</button><div class="grid"></div>
-  <div class="pager"><button class="prev" aria-label="Página anterior">‹</button><span>Página 1</span><button class="next" aria-label="Próxima página">›</button></div></section>
+  <div class="pager"><button class="prev" data-k="prev" aria-label="Página anterior">‹</button><span>Página 1</span><button class="next" data-k="next" aria-label="Próxima página">›</button></div></section>
 <section id="theirs"><h2>Inventário de sigma2</h2><button>Tudo</button><div class="grid"></div>
-  <div class="pager"><button class="prev" aria-label="Página anterior">‹</button><span>Página 1</span><button class="next" aria-label="Próxima página">›</button></div></section>
+  <div class="pager"><button class="prev" data-k="prev" aria-label="Página anterior">‹</button><span>Página 1</span><button class="next" data-k="next" aria-label="Próxima página">›</button></div></section>
 </main>
 <aside><h2>Sua oferta</h2><div class="drop" id="offer"></div><button>Adicionar mais Robux</button><div>Valor total: 0</div>
   <h2>Seu pedido</h2><div class="drop" id="request"></div><button id="send" onclick="window.sent=true">Fazer oferta</button></aside>
@@ -35,13 +35,16 @@ function render(side){const sec=document.getElementById(side),g=sec.querySelecto
       c.querySelector('.thumb').onclick=()=>{window.clicks.push('REMOVED:'+n);c.remove();window[k]=0;t.classList.remove('on')};
       document.getElementById(side==='mine'?'offer':'request').appendChild(c)};
     g.appendChild(t)});
-  sec.querySelector('.next').disabled=(p+1)*PER>=lists[side].length;sec.querySelector('.prev').disabled=p===0;sec.querySelector('.pager span').textContent='Página '+(p+1)}
+  sec.querySelector('[data-k=next]').disabled=(p+1)*PER>=lists[side].length;sec.querySelector('[data-k=prev]').disabled=p===0;sec.querySelector('.pager span').textContent='Página '+(p+1)}
 for(const side of ['mine','theirs']){const sec=document.getElementById(side);
-  sec.querySelector('.next').onclick=()=>{sec.dataset.page=(sec.dataset.page|0)+1;render(side)};
-  sec.querySelector('.prev').onclick=()=>{sec.dataset.page=Math.max(0,(sec.dataset.page|0)-1);render(side)}}
+  sec.querySelector('[data-k=next]').onclick=()=>{sec.dataset.page=(sec.dataset.page|0)+1;render(side)};
+  sec.querySelector('[data-k=prev]').onclick=()=>{sec.dataset.page=Math.max(0,(sec.dataset.page|0)-1);render(side)}}
 // mode=slow: like a tab opened just now — your inventory at 0.8 s, the partner's only at 4 s.
 const SLOW = new URLSearchParams(location.search).get('mode')==='slow';
 const TOGGLE = new URLSearchParams(location.search).get('mode')==='toggle';
+// mode=bare (the real page of 24/11): the page arrows are icons only — no class, label or text that says next/previous.
+if (new URLSearchParams(location.search).get('mode')==='bare')
+  document.querySelectorAll('.pager button').forEach(b=>{b.removeAttribute('class');b.removeAttribute('aria-label');b.innerHTML='<svg width="12" height="12"><path d="M2 2L8 6L2 10"/></svg>'});
 setTimeout(()=>{render('mine');if(!SLOW)render('theirs')},800);
 if (SLOW) setTimeout(()=>render('theirs'),4000);
 </script></body></html>

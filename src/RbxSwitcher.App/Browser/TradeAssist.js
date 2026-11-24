@@ -36,7 +36,8 @@
       el.scrollIntoView({ block: 'center' });
       if (full) for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup'])
         el.dispatchEvent(new (type.startsWith('pointer') && window.PointerEvent ? PointerEvent : MouseEvent)(type, { bubbles: true, cancelable: true, view: window }));
-      el.click();
+      if (typeof el.click === 'function') el.click(); // an <svg> icon has no click(): send the event
+      else el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
     } finally { window.removeEventListener('click', stopNav, true); }
   }
 
@@ -141,7 +142,36 @@
     prev: '[aria-label*="prev" i], [aria-label*="anterior" i], [title*="prev" i], [title*="anterior" i], [class*="prev" i], ' +
           '[class*="pager" i] [class*="left" i], [class*="chevron-left" i], [class*="arrow-left" i]',
   };
+  // The page arrows next to a "Página 2" / "Page 2" label (the real page draws them as bare icons: no class, label or
+  // text that says next/previous). The side is the pager's section ("Seu inventário" / "Inventário de …").
+  const PAGE_LABEL = /^\s*(p[aá]gina|page)\s*\d+(\s*(de|of|\/)\s*\d+)?\s*$/i;
+  function pagerArrows(dir, side) {
+    const want = side === 'give' ? 'mine' : 'partner', found = [];
+    for (const lab of document.body.querySelectorAll('*')) {
+      if (lab.children.length || !vis(lab) || !PAGE_LABEL.test(lab.textContent || '')) continue;
+      for (let box = lab.parentElement, i = 0; box && box !== document.body && i < 3; box = box.parentElement, i++) {
+        const clickable = [...box.querySelectorAll('button, [role="button"], a, svg')]
+          .map(el => el.closest('button, [role="button"], a') || el)
+          .filter((el, k, list) => list.indexOf(el) === k && !el.contains(lab) && vis(el));
+        const before = clickable.filter(el => lab.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING);
+        const after = clickable.filter(el => lab.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+        if (!before.length && !after.length) continue;
+        const el = dir === 'next' ? after[0] : before[before.length - 1];
+        if (el) found.push({ el, z: zoneOf(lab) });
+        break;
+      }
+    }
+    const usable = found.filter(f => !disabled(f.el) && !realLink(f.el.closest && f.el.closest('a[href]')) && !NEVER.test(safeText(f.el)));
+    const zoned = usable.filter(f => f.z === want);
+    if (zoned.length) return zoned.map(f => f.el);
+    if (usable.length <= 1) return usable.map(f => f.el);
+    const d = usable.map(f => partnerDistance(f.el)), best = side === 'ask' ? Math.min(...d) : Math.max(...d);
+    return usable.filter((_, i) => d[i] === best).map(f => f.el);
+  }
+
   function arrows(dir, side) {
+    const pager = pagerArrows(dir, side);
+    if (pager.length) return pager;
     const all = [...document.querySelectorAll(ARROWS[dir])]
       .map(el => el.closest('button, a, [role="button"], li') || el)
       .filter((el, i, list) => list.indexOf(el) === i && vis(el) && !disabled(el) && !realLink(el.closest('a[href]')) && !NEVER.test(safeText(el)));
@@ -181,8 +211,11 @@
       for (let page = 0; page < 1000 && !late(); page++) {
         const b = arrows(dir, side)[0], before = pageText();
         if (!b || !clickControl(b)) break;
-        await sleep(900);
-        if (pageText() === before) break; // the arrow did nothing: first or last page
+        // Wait for the next page to show (up to 4 s); nothing changed: first or last page.
+        let moved = false;
+        for (const until = Date.now() + 4000; Date.now() < until && !moved; ) { await sleep(200); moved = pageText() !== before; }
+        if (!moved) break;
+        await sleep(300);
         r = pick(it, side, taken);
         if (r.card || r.count > 1) return r;
       }

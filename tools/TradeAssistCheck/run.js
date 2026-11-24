@@ -18,6 +18,8 @@ const src = fs.readFileSync(process.argv[2], 'utf8');
     { file: 'mock-real.html', mode: 'slow', plan: { give: [{name:'Black Headphones',serial:null},{name:'Eggcient Woolly Mammoth',serial:44}], ask: [{name:'Deteggctive W. Wolf',serial:null}], self:['fonte_beta','Beta'], partner:['altconta18','sigma2'] } },
     // The real page of 24/11: a ✓ overlay only, the offer appears 3 s later without the serial, a second click removes.
     { file: 'mock-real.html', mode: 'toggle', plan: { give: [{name:'Black Headphones',serial:null},{name:'Camo Commando',serial:2710},{name:'Old Hat',serial:null}], ask: [{name:'Bighead',serial:null}], self:['fonte_beta','Beta'], partner:['altconta18','sigma2'] } },
+    // The real page of 24/11: page arrows are bare icons; the items are on page 2.
+    { file: 'mock-real.html', mode: 'bare', plan: { give: [{name:'Old Hat',serial:null},{name:'Camo Commando',serial:2710},{name:'Black Headphones',serial:null}], ask: [], self:['fonte_beta','Beta'], partner:['altconta18','sigma2'] } },
     // A page that selects on mousedown only.
     { mode: 'mousedown', plan: { give: [{name:'Sword',serial:3}], ask: [], self:'fonte_beta', partner:'altconta18' } },
   ];
