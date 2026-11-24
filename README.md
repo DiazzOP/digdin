@@ -46,7 +46,7 @@ oferece entrar nele automaticamente, com o mesmo login de uso único do botão "
 
 O canal de atualização vem **desligado**. Para que novas versões cheguem sem baixar zip:
 
-1. Publique este código num repositório **seu** no GitHub. O workflow `.github/workflows/release.yml` já compila cada tag `vX.Y.Z` e publica `RbxSwitcher.exe` + `RbxSwitcher.exe.sha256`.
+1. Publique este código num repositório **seu** no GitHub. O workflow `.github/workflows/release.yml` publica sozinho: a cada envio para `main` com uma versão nova em `Directory.Build.props`, ele testa, compila e cria o release `vX.Y.Z` com `RbxSwitcher.exe` + `RbxSwitcher.exe.sha256`.
 2. No app, use **Configurações → Atualizações…** e informe `seu-usuario/seu-repositorio`.
 
 O app procura versões a cada 6 horas e avisa. Ele só instala depois que você confirmar e se o SHA-256 conferir. Só fala com o GitHub desse repositório e nunca envia dados de conta.

@@ -1,10 +1,12 @@
-# Builds a release from the source in this repository when a version tag (v1.2.3) is pushed.
-# The app's updater (⚙ → Atualizações) installs RbxSwitcher.exe only if it matches RbxSwitcher.exe.sha256.
+# Builds and publishes a release whenever main gets a version (Directory.Build.props <Version>) that has no release yet.
+# The tag vX.Y.Z is created by the release. The app's updater (Configurações → Atualizações) installs RbxSwitcher.exe
+# only if it matches RbxSwitcher.exe.sha256.
 name: Release
 
 on:
   push:
-    tags: ['v*.*.*']
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,21 +17,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Version
+        id: v
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+          gh release view "v$version" --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) { "exists=true" >> $env:GITHUB_OUTPUT; Write-Host "v$version already released" } else { "exists=false" >> $env:GITHUB_OUTPUT }
+          exit 0
+
       - uses: actions/setup-dotnet@v4
+        if: steps.v.outputs.exists == 'false'
         with:
           dotnet-version: '8.0.x'
 
       - name: Test
+        if: steps.v.outputs.exists == 'false'
         run: dotnet test -c Release
 
-      - name: Check version matches tag
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}".TrimStart('v')
-          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
-          if ($tag -ne $version) { throw "Tag v$tag does not match <Version>$version</Version>" }
-
       - name: Publish
+        if: steps.v.outputs.exists == 'false'
         run: >
           dotnet publish src/RbxSwitcher.App -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
@@ -37,19 +47,21 @@ jobs:
           -p:AllowedReferenceRelatedFileExtensions=none -o dist/RbxSwitcher
 
       - name: Hash and package
+        if: steps.v.outputs.exists == 'false'
         shell: pwsh
         run: |
           $hash = (Get-FileHash dist/RbxSwitcher/RbxSwitcher.exe -Algorithm SHA256).Hash.ToLower()
           "$hash  RbxSwitcher.exe" | Out-File -Encoding ascii -NoNewline dist/RbxSwitcher.exe.sha256
-          Compress-Archive -Path dist/RbxSwitcher -DestinationPath "dist/RbxSwitcher-${{ github.ref_name }}-win-x64.zip"
+          Compress-Archive -Path dist/RbxSwitcher -DestinationPath "dist/RbxSwitcher-${{ steps.v.outputs.tag }}-win-x64.zip"
 
       - name: Create release
+        if: steps.v.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          gh release create "${{ github.ref_name }}" `
+          gh release create "${{ steps.v.outputs.tag }}" `
             dist/RbxSwitcher/RbxSwitcher.exe `
             dist/RbxSwitcher.exe.sha256 `
-            "dist/RbxSwitcher-${{ github.ref_name }}-win-x64.zip" `
-            --title "RbxSwitcher ${{ github.ref_name }}" --generate-notes
+            "dist/RbxSwitcher-${{ steps.v.outputs.tag }}-win-x64.zip" `
+            --target "${{ github.sha }}" --title "RbxSwitcher ${{ steps.v.outputs.tag }}" --generate-notes
