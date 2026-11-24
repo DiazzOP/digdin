@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Design preview only: the real app's sources with fictitious accounts, to take screenshots under Wine. Not shipped. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>RbxSwitcher.App</RootNamespace>
+    <AssemblyName>RbxPreview</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <NoWarn>$(NoWarn);MSB3277;CS8602;CS8604;CS8600</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <ProjectReference Include="../../src/RbxSwitcher.Core/RbxSwitcher.Core.csproj" />
+    <Compile Include="../../src/RbxSwitcher.App/**/*.cs" Exclude="../../src/RbxSwitcher.App/Program.cs;../../src/RbxSwitcher.App/obj/**;../../src/RbxSwitcher.App/bin/**" />
+    <Using Include="System.Drawing" />
+    <Using Include="System.Windows.Forms" />
+  </ItemGroup>
+</Project>

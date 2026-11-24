@@ -1,0 +1,1 @@
+{"subscriptions": [{"subscriptionId": "sub-fake-201", "productType": "Blackbird", "status": "Active", "expirationTimestampMs": 1797297840000, "renewalTimestampMs": 1797001200000, "paymentMethod": {"type": "Card", "last4": "0000"}}], "nextPageCursor": null}

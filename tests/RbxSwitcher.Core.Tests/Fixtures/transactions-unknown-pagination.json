@@ -1,0 +1,3 @@
+{"continuationToken":"fixture-cont-2","data":[
+ {"id":"fake-up-1","created":"2026-11-16T10:00:00Z","transferRole":"Sender","currency":{"amount":-100,"type":"Robux"}}
+]}

@@ -1,0 +1,5 @@
+{"nextPageToken":"fixture-txtoken-2","data":[
+ {"id":"fake-tt-010","created":"2026-11-16T17:00:00Z","transferRole":"Sender","currency":{"amount":-150,"type":"Robux"}},
+ {"id":"fake-tt-009","created":"2026-11-16T11:00:00Z","transferRole":"Receiver","currency":{"amount":700,"type":"Robux"}},
+ {"id":"fake-tt-008","created":"2026-11-15T20:00:00Z","transferRole":"Sender","currency":{"amount":-250,"type":"Robux"}}
+]}

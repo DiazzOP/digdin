@@ -1,0 +1,5 @@
+{"previousPageCursor":"fixture-cursor-p1","nextPageCursor":"fixture-cursor-p3","data":[
+ {"id":"fake-tx-0002","created":"2026-11-16T12:00:00Z","transferRole":"Sender","currency":{"amount":-1200,"type":"Robux"}},
+ {"id":"fake-tx-0001","created":"2026-11-01T15:00:00Z","transferRole":"Sender","currency":{"amount":-8747,"type":"Robux"}},
+ {"id":"fake-tx-0000","created":"2026-10-10T15:00:00Z","transferRole":"Sender","currency":{"amount":-5000,"type":"Robux"}}
+]}

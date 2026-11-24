@@ -1,0 +1,25 @@
+{
+ "nextPageCursor": null,
+ "data": [
+  {
+   "id": "5550001",
+   "idHash": "hash-a12",
+   "created": "2026-11-16T19:30:00Z",
+   "transferRole": "Sender",
+   "currency": {
+    "amount": -100,
+    "type": "Robux"
+   }
+  },
+  {
+   "id": "5550001",
+   "idHash": "hash-a01",
+   "created": "2026-11-16T14:00:00Z",
+   "transferRole": "Sender",
+   "currency": {
+    "amount": -999,
+    "type": "Robux"
+   }
+  }
+ ]
+}

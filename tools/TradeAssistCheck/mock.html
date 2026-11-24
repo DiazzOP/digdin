@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+.card{width:120px;height:160px;display:inline-block;border:1px solid #999;margin:4px;vertical-align:top}
+.card.sel{outline:3px solid green}.hidden{display:none}.zone{border:1px dashed #555;min-height:60px;margin:6px}
+</style></head><body>
+<h1>Trade with <a href="https://example.invalid/users/9/profile">altconta18</a></h1>
+<div id="tabs" class="MODE-tabs"><button id="tab-mine">Your Inventory</button><button id="tab-theirs">altconta18's Inventory</button></div>
+<div id="inv-mine" class="inventory"><div class="items"></div><button class="pager-prev">‹</button><button class="pager-next" aria-label="Next page">›</button></div>
+<div id="inv-theirs" class="inventory"><h3>altconta18</h3><div class="items"></div><button class="pager-prev">‹</button><button class="pager-next" aria-label="Next page">›</button></div>
+<div class="zone" id="offer"><h4>Your Offer</h4></div>
+<div class="zone" id="request"><h4>Your Request</h4></div>
+<button id="send" onclick="window.sent=true">Make Offer</button>
+<script>
+const MODE = new URLSearchParams(location.search).get('mode') || 'tabs';
+const MD = MODE==='mousedown';
+const PER = 4;
+const mine = [['Cool Hat',5],['Valkyrie Helm',1],['Valkyrie Helm',9],['Sword',3],['Shield',4],['Cape',6],
+              ['Black Headphones',12],['Pink Eye',3],['Eggcient Woolly Mammoth',44],['Epic Egg',2],['Counterfeit Hat',8],['Twin Cap',null],['Twin Cap',null]];
+const theirs = [['Rock',1],['Epic Egg',7],['Deteggctive W. Wolf',7],['Tree',2],['Bird',5]];
+window.clicks = [];
+function render(side){
+  const list = side==='mine'?mine:theirs, inv = document.querySelector('#inv-'+side), box = inv.querySelector('.items');
+  const page = inv.dataset.page|0; box.innerHTML='';
+  list.slice(page*PER, page*PER+PER).forEach(([n,s],i)=>{
+    const c=document.createElement('div'); c.className='card'+(inv.dataset['s'+(page*PER+i)]?' sel':'');
+    const link = n==='Pink Eye' ? '<a href="https://example.invalid/catalog"><img alt="" width=60 height=60></a>' : '<img width=60 height=60>';
+    c.innerHTML = link + '<div class="item-card-name">'+n+'</div><span class="serial">'+(s==null?'':'#'+s)+'</span><span>RAP 1,000</span>';
+    c.addEventListener(MODE==='mousedown'?'mousedown':'click',()=>{ window.clicks.push(n+'#'+s); if(c.classList.contains('sel')) return; inv.dataset['s'+(page*PER+i)]=1; c.classList.add('sel');
+      const z=document.querySelector(side==='mine'?'#offer':'#request'); const copy=c.cloneNode(true); copy.classList.remove('sel'); z.appendChild(copy); });
+    box.appendChild(c);
+  });
+  inv.querySelector('.pager-next').disabled = (page+1)*PER >= list.length;
+}
+for (const side of ['mine','theirs']) {
+  const inv=document.querySelector('#inv-'+side);
+  inv.querySelector('.pager-next').onclick=()=>{inv.dataset.page=(inv.dataset.page|0)+1;render(side)};
+  inv.querySelector('.pager-prev').onclick=()=>{inv.dataset.page=Math.max(0,(inv.dataset.page|0)-1);render(side)};
+}
+function show(side){ if(MODE!=='tabs') return; document.querySelector('#inv-mine').classList.toggle('hidden', side!=='mine'); document.querySelector('#inv-theirs').classList.toggle('hidden', side!=='theirs'); }
+document.querySelector('#tab-mine').onclick=()=>show('mine'); document.querySelector('#tab-theirs').onclick=()=>show('theirs');
+if (MODE!=='tabs') document.querySelector('#tabs').classList.add('hidden');
+// The inventory loads late, like the real page.
+setTimeout(()=>{ render('mine'); render('theirs'); show('mine'); }, 800);
+</script></body></html>

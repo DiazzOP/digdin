@@ -1,0 +1,39 @@
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><style>
+body{font-family:sans-serif;display:flex;gap:40px}.grid{display:grid;grid-template-columns:repeat(5,112px);gap:8px}
+.tile{width:112px}.thumb{width:112px;height:112px;background:#ccc;position:relative}.tile.on{opacity:.5}
+.check{position:absolute;right:4px;top:4px;display:none}.tile.on .check{display:block}.drop{border:2px dashed #999;min-height:60px;width:300px}
+</style></head><body>
+<!-- Mirrors roblox.com/pt/users/{id}/trade as seen on 19/11/2026: sections titled "Seu inventário" and "Inventário de <display name>",
+     cards = picture + name + RAP, serial only on some, "Sua oferta" / "Seu pedido" columns where the selected item appears. -->
+<main><header><a href="https://example.invalid/users/9/profile">Beta</a></header>
+<section id="mine"><h2>Seu inventário</h2><button>Tudo</button><div class="grid"></div>
+  <div class="pager"><button class="prev" aria-label="Página anterior">‹</button><span>Página 1</span><button class="next" aria-label="Próxima página">›</button></div></section>
+<section id="theirs"><h2>Inventário de sigma2</h2><button>Tudo</button><div class="grid"></div>
+  <div class="pager"><button class="prev" aria-label="Página anterior">‹</button><span>Página 1</span><button class="next" aria-label="Próxima página">›</button></div></section>
+</main>
+<aside><h2>Sua oferta</h2><div class="drop" id="offer"></div><button>Adicionar mais Robux</button><div>Valor total: 0</div>
+  <h2>Seu pedido</h2><div class="drop" id="request"></div><button id="send" onclick="window.sent=true">Fazer oferta</button></aside>
+<script>
+window.clicks=[];
+const lists={mine:[['Black Headphones',null,3130],['Tiny Tank Egg',null,211],['Tiny Tank Egg',null,211],['Saber Boss Egg',null,198],['Deteggctive W. Wolf',null,198],
+  ['Deteggctive W. Wolf',null,198],['Eggcient Woolly Mammoth',null,184],['Eggcient Woolly Mammoth',null,184],['Tallaheggsee, Zombie Slayer',null,198],['Rocket Eggscape',null,195],
+  ['Old Hat',null,100]],
+  theirs:[['Verdant Crown',1117834,2958],['Deteggctive W. Wolf',null,198],['Bighead',null,3014]]};
+const PER=10;
+function render(side){const sec=document.getElementById(side),g=sec.querySelector('.grid'),p=sec.dataset.page|0;g.innerHTML='';
+  lists[side].slice(p*PER,p*PER+PER).forEach(([n,ser,rap],i)=>{const k=side+(p*PER+i),t=document.createElement('div');t.className='tile'+(window[k]?' on':'');
+    t.innerHTML='<div class="thumb"><img width=60 height=60><span class="check">✓</span>'+(ser?'<span>#'+ser+'</span>':'')+'</div><div class="name">'+n+'</div><div>⏣'+rap+'</div>';
+    t.querySelector('.thumb').onclick=()=>{window.clicks.push(side+':'+n);if(window[k])return;window[k]=1;t.classList.add('on');
+      const c=document.createElement('div');c.className='tile';c.innerHTML='<div class="thumb"><img width=40 height=40></div><div class="name">'+n+'</div><div>⏣'+rap+'</div>';
+      c.querySelector('.thumb').onclick=()=>{window.clicks.push('REMOVED:'+n);c.remove();window[k]=0;t.classList.remove('on')};
+      document.getElementById(side==='mine'?'offer':'request').appendChild(c)};
+    g.appendChild(t)});
+  sec.querySelector('.next').disabled=(p+1)*PER>=lists[side].length;sec.querySelector('.prev').disabled=p===0;sec.querySelector('.pager span').textContent='Página '+(p+1)}
+for(const side of ['mine','theirs']){const sec=document.getElementById(side);
+  sec.querySelector('.next').onclick=()=>{sec.dataset.page=(sec.dataset.page|0)+1;render(side)};
+  sec.querySelector('.prev').onclick=()=>{sec.dataset.page=Math.max(0,(sec.dataset.page|0)-1);render(side)}}
+// mode=slow: like a tab opened just now — your inventory at 0.8 s, the partner's only at 4 s.
+const SLOW = new URLSearchParams(location.search).get('mode')==='slow';
+setTimeout(()=>{render('mine');if(!SLOW)render('theirs')},800);
+if (SLOW) setTimeout(()=>render('theirs'),4000);
+</script></body></html>

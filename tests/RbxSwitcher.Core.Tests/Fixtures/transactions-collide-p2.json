@@ -1,0 +1,65 @@
+{
+ "nextPageCursor": "fixture-col-p3",
+ "data": [
+  {
+   "id": "5550001",
+   "idHash": "hash-a06",
+   "created": "2026-11-07T22:00:00Z",
+   "transferRole": "Sender",
+   "currency": {
+    "amount": -215,
+    "type": "Robux"
+   }
+  },
+  {
+   "id": "5550001",
+   "idHash": "hash-a07",
+   "created": "2026-11-03T15:00:00Z",
+   "transferRole": "Sender",
+   "currency": {
+    "amount": -350,
+    "type": "Robux"
+   }
+  },
+  {
+   "id": "5550001",
+   "idHash": "hash-a08",
+   "created": "2026-10-28T11:00:00Z",
+   "transferRole": "Sender",
+   "currency": {
+    "amount": -400,
+    "type": "Robux"
+   }
+  },
+  {
+   "id": "5550001",
+   "idHash": "hash-a09",
+   "created": "2026-10-22T19:00:00Z",
+   "transferRole": "Sender",
+   "currency": {
+    "amount": -450,
+    "type": "Robux"
+   }
+  },
+  {
+   "id": "5550001",
+   "idHash": "hash-a10",
+   "created": "2026-10-19T10:00:00Z",
+   "transferRole": "Sender",
+   "currency": {
+    "amount": -300,
+    "type": "Robux"
+   }
+  },
+  {
+   "id": "5550001",
+   "idHash": "hash-a11",
+   "created": "2026-10-05T10:00:00Z",
+   "transferRole": "Sender",
+   "currency": {
+    "amount": -7000,
+    "type": "Robux"
+   }
+  }
+ ]
+}

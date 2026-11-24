@@ -1,0 +1,4 @@
+{"nextPageCursor":"fixture-asc-2","data":[
+ {"id":"fake-asc-1","created":"2026-10-01T10:00:00Z","transferRole":"Sender","currency":{"amount":-100,"type":"Robux"}},
+ {"id":"fake-asc-2","created":"2026-11-16T10:00:00Z","transferRole":"Sender","currency":{"amount":-200,"type":"Robux"}}
+]}

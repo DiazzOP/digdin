@@ -1,0 +1,45 @@
+{
+ "nextPageCursor": "fixture-inc-p2",
+ "data": [
+  {
+   "id": "5550001",
+   "idHash": "hash-a12",
+   "created": "2026-11-16T19:30:00Z",
+   "transferRole": "Sender",
+   "currency": {
+    "amount": -100,
+    "type": "Robux"
+   }
+  },
+  {
+   "id": "5550001",
+   "idHash": "hash-a01",
+   "created": "2026-11-16T14:00:00Z",
+   "transferRole": "Sender",
+   "currency": {
+    "amount": -400,
+    "type": "Robux"
+   }
+  },
+  {
+   "id": "5550001",
+   "idHash": "hash-a02",
+   "created": "2026-11-16T09:00:00Z",
+   "transferRole": "Receiver",
+   "currency": {
+    "amount": 250,
+    "type": "Robux"
+   }
+  },
+  {
+   "id": "5550001",
+   "idHash": "hash-a03",
+   "created": "2026-11-14T20:00:00Z",
+   "transferRole": "Sender",
+   "currency": {
+    "amount": -300,
+    "type": "Robux"
+   }
+  }
+ ]
+}
