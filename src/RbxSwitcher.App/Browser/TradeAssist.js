@@ -256,13 +256,20 @@
       if (late()) { R.missing.push(label(it)); R.notes.push('tempo esgotado'); continue; }
       const r = await find(it, side, taken);
       if (!r.card) { (r.count > 1 ? R.ambiguous : R.missing).push(label(it)); continue; }
-      const card = r.card, beforeCards = cardsFor(it), cls = card.className;
-      const changed = () => cardsFor(it).length !== beforeCards.length || card.className !== cls || !document.contains(card) || disabled(card);
+      const card = r.card, beforeCards = cardsFor(it), cls = card.className, html = card.innerHTML;
+      // The item in "Sua oferta" / "Seu pedido", by name (the page shows it there without the serial).
+      const placed = () => nameNodes(it.name).filter(n => zoneOf(n) === 'offer').length; // both columns are the "offer" zone
+      const placedBefore = placed();
+      // Selected: the card changed (class, a ✓ drawn on it, disabled, gone), or one more of the item is in the offer.
+      const changed = () => placed() > placedBefore || cardsFor(it).length !== beforeCards.length || card.className !== cls
+                            || card.innerHTML !== html || !document.contains(card) || disabled(card);
       // Waits up to `ms` for the click to show (the page can be slow): a second click too early would take the item back out.
       const shows = async ms => { for (const until = Date.now() + ms; Date.now() < until; await sleep(150)) if (changed()) return true; return changed(); };
       if (!clickCard(card, false)) { R.blocked = (R.blocked || []).concat(label(it)); R.missing.push(label(it)); continue; }
-      let ok = await shows(2500);
-      if (!ok) { clickCard(card, true); ok = await shows(2500); } // a page that listens to pointer/mouse events
+      let ok = await shows(4000);
+      // A second (pointer/mouse) click only when nothing at all changed: on the real page a second click takes the item
+      // back out of the offer.
+      if (!ok && !changed()) { clickCard(card, true); ok = await shows(4000); }
       taken.add(card);
       for (const c of cardsFor(it)) if (!beforeCards.includes(c)) taken.add(c);
       (ok ? R.selected : R.unconfirmed).push(label(it));
