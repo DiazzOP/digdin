@@ -98,6 +98,12 @@ achando cada um pelo nome e pela série (troca a aba de inventário e passa as p
 - um cartão com outra série não é marcado; cópias iguais sem série visível são equivalentes e a primeira livre é
   marcada (a conferência aceita outra cópia do mesmo item quando o Roblox informa qual foi, e o plano passa a seguir
   a cópia real);
+- um item só conta como selecionado quando aparece em "Sua oferta" (ou "Seu pedido"); no fim o script confere o que a
+  etapa pede contra o que está na trade e seleciona de novo o que faltar (até 3 rodadas). A barra de status diz o que
+  está de fato na trade;
+- nunca clica num cartão já escolhido (a página marca o cartão inteiro como indisponível; clicar de novo tiraria o item)
+  nem numa cópia "Em retenção"; um clique que a página ainda não aceitou (cartão recém-desenhado) é repetido;
+- item fora da página aberta: primeiro a lupa (Pesquisar) do inventário, depois as setas de página;
 - não lê cookies nem armazenamento da página; leva só nomes e séries dos itens e os nomes das duas contas;
 - a barra de status diz quantos itens foram marcados e quais faltam, e a etapa guarda isso no histórico;
 - se algo não foi achado, o app salva `trade-pagina.txt` na pasta de dados: a estrutura da página (tags e classes),

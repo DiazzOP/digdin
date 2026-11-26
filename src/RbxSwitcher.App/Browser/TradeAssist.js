@@ -10,7 +10,7 @@
   const R = window.__rbxswAssist = { state: 'running', selected: [], missing: [], ambiguous: [], unconfirmed: [], notes: [], structure: null };
   // Controls the script must never press (checked on every tab/arrow it clicks, and on a card's own buttons).
   const NEVER = /(enviar|send|make offer|fazer oferta|fazer proposta|propor|confirm|aceitar|accept|counter|contrapropo|decline|recusar|cancel)/i;
-  const DEADLINE = Date.now() + 150000; // the app waits a little longer than this
+  const DEADLINE = Date.now() + 240000; // the app waits a little longer than this
   const late = () => Date.now() > DEADLINE;
   const esc = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const norm = s => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -66,6 +66,11 @@
     input.dispatchEvent(new Event('change', { bubbles: true }));
   };
   const searched = new Set();
+  async function clearSearches() {
+    let any = false;
+    for (const input of searched) if (document.contains(input) && input.value) { setInput(input, ''); any = true; }
+    if (any) await settle(3000);
+  }
   function searchInput(want) {
     return [...document.querySelectorAll('input')].find(i => vis(i) && ['text', 'search', ''].includes((i.getAttribute('type') || '').toLowerCase()) && zoneOf(i) === want);
   }
@@ -152,21 +157,53 @@
     return 999;
   }
 
-  // The card to click for an item on one side. Copies that cannot be told apart (same item, no serial shown) are
-  // interchangeable: the first one goes. Ambiguous only when the side itself cannot be told.
+  // The whole card (the real page puts its state on div.trade-inventory-card[role=button], around the inner link).
+  const rootOf = card => card.closest('[role="button"], li') || card;
+  // Already chosen (in the offer) or not choosable: clicking it would take the item back out, or do nothing.
+  const blockedCard = card => {
+    const r = rootOf(card), cls = (r.className || '') + ' ' + (card.className || '');
+    return disabled(r) || /(is-unavailable|unavailable|\bselected\b|\bchecked\b|\bon\b)/i.test(cls)
+           || r.getAttribute('aria-checked') === 'true' || r.getAttribute('aria-pressed') === 'true';
+  };
+  // A copy Roblox holds ("Em retenção"): it cannot go in a trade yet.
+  const heldCard = card => /(em reten[cç][aã]o|on hold|em espera)/i.test(rootOf(card).innerText || '');
+
+  // The card to click for an item on one side: never a held copy, never one already chosen. Copies that cannot be
+  // told apart (same item, no serial shown) are interchangeable: the first free one goes. Ambiguous only when the side
+  // itself cannot be told. `held`: only held copies were there.
   function pick(it, side, taken) {
     const want = side === 'give' ? 'mine' : 'partner';
-    const cards = cardsFor(it).filter(c => !taken.has(c)).map(c => ({ c, z: zoneOf(c) })).filter(x => x.z !== 'offer');
-    const usable = x => !disabled(x.c) && !/(\bselected\b|\bchecked\b)/i.test(x.c.className || '') && x.c.getAttribute('aria-checked') !== 'true';
+    const all = cardsFor(it).filter(c => !taken.has(c)).map(c => ({ c, z: zoneOf(c) })).filter(x => x.z !== 'offer');
+    const held = all.length > 0 && all.every(x => heldCard(x.c));
+    const cards = all.filter(x => !heldCard(x.c));
+    const free = x => !blockedCard(x.c);
     const onSide = cards.filter(x => x.z === want);
-    if (onSide.length) { const first = onSide.find(usable) || onSide[0]; return { card: first.c, count: 1 }; }
-    const unknown = cards.filter(x => x.z === 'unknown');
-    if (unknown.length <= 1) return { card: unknown[0] ? unknown[0].c : null, count: unknown.length };
+    if (onSide.length) { const first = onSide.find(free); return first ? { card: first.c, count: 1 } : { card: null, count: 0, chosen: true }; }
+    const unknown = cards.filter(x => x.z === 'unknown' && free(x));
+    if (unknown.length <= 1) return { card: unknown[0] ? unknown[0].c : null, count: unknown.length, held };
     const d = unknown.map(x => partnerDistance(x.c));
     if (d.every(v => v === d[0])) return { card: null, count: unknown.length }; // nothing tells the sides apart
     const best = side === 'ask' ? Math.min(...d) : Math.max(...d);
-    const on = unknown.filter((_, i) => d[i] === best);
-    return { card: (on.find(usable) || on[0]).c, count: 1 };
+    return { card: unknown.find((_, i) => d[i] === best).c, count: 1 };
+  }
+
+  // What is really in the trade: an item counts once it shows in "Sua oferta" (give) or "Seu pedido" (ask). The column
+  // is the nearest of those titles before the item on the page.
+  const COLUMN = { give: /^\s*(sua oferta|your offer|você oferece|you give|tu oferta)\s*$/i, ask: /^\s*(seu pedido|your request|você recebe|you receive|tu solicitud)\s*$/i };
+  function columnTitles() {
+    const out = [];
+    for (const el of document.body.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"], span, div, p'))
+      if (el.children.length === 0 && vis(el)) for (const side of ['give', 'ask']) if (COLUMN[side].test(el.textContent || '')) out.push({ el, side });
+    return out;
+  }
+  function placedOf(it, side) {
+    const titles = columnTitles();
+    return nameNodes(it.name).filter(n => {
+      if (zoneOf(n) !== 'offer') return false;
+      let col = null;
+      for (const t of titles) if (t.el.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING) col = t.side;
+      return col === side;
+    }).length;
   }
 
   // Inventory tabs ("Seu inventário", "@partner") and page arrows, to bring a card into view.
@@ -240,17 +277,23 @@
   }
 
   async function find(it, side, taken) {
-    let r = pick(it, side, taken);
-    if (r.card || r.count > 1) return r;
+    let sawHeld = false;
+    const look = () => { const x = pick(it, side, taken); if (x.held) sawHeld = true; return x; };
+    const found = x => !!(x && (x.card || x.count > 1 || x.chosen));
+    const done = x => ({ ...(x || { card: null, count: 0 }), held: !(x && x.card) && sawHeld });
+    let r = look();
+    if (found(r)) return done(r);
     // Not on screen yet: give a page that is still filling in a moment before changing tabs or pages.
     await settle(6000);
-    r = pick(it, side, taken);
-    if (r.card || r.count > 1) return r;
+    r = look();
+    if (found(r)) return done(r);
     const tab = tabFor(side);
-    if (tab && clickControl(tab)) { await sleep(1200); r = pick(it, side, taken); if (r.card || r.count > 1) return r; }
+    if (tab && clickControl(tab)) { await sleep(1200); r = look(); if (found(r)) return done(r); }
     // The inventory's search first: it looks at every page at once.
-    const s = await viaSearch(it, side, taken);
-    if (s && (s.card || s.count > 1)) return s;
+    const sr = await viaSearch(it, side, taken);
+    if (sr && sr.held) sawHeld = true;
+    if (found(sr)) return done(sr);
+    await clearSearches(); // paging goes over the whole inventory
     // Forward to the last page, then back to the first: every page of that inventory is looked at once.
     for (const dir of ['next', 'prev']) {
       for (let page = 0; page < 1000 && !late(); page++) {
@@ -263,12 +306,13 @@
         // The label can change before the cards: wait for the cards themselves, then for the page to settle.
         await until(() => cardNames() !== cards, 5000);
         await settle(3000);
-        r = pick(it, side, taken);
-        if (r.card || r.count > 1) return r;
+        r = look();
+        if (found(r)) return done(r);
       }
     }
-    return r;
+    return done(r);
   }
+
 
   function shape(t) {
     let s = t || '';
@@ -329,32 +373,71 @@
     for (let t = 0; t < 40 && !all.some(([it]) => nameNodes(it.name).length) && !(t >= 6 && pictures() >= 4); t++) await sleep(500);
     await settle(6000);
 
-    // Cards already used: the inventory cards clicked and the copies that then appeared in the offer/request (clicking
-    // one of those would take the item back out).
+    // Cards already clicked (a later copy of the same item takes another card).
     const taken = new Set();
+    // What the page lets us check: the "Sua oferta" / "Seu pedido" titles. Without them, only the card itself tells.
+    const canVerify = columnTitles().some(t => t.side === 'give') && columnTitles().some(t => t.side === 'ask');
+    const groups = new Map(); // one entry per side + item name: the copies the step wants
     for (const [it, side] of all) {
-      if (late()) { R.missing.push(label(it)); R.notes.push('tempo esgotado'); continue; }
-      const r = await find(it, side, taken);
-      if (!r.card) { (r.count > 1 ? R.ambiguous : R.missing).push(label(it)); continue; }
-      const card = r.card, beforeCards = cardsFor(it), cls = card.className, html = card.innerHTML;
-      // The item in "Sua oferta" / "Seu pedido", by name (the page shows it there without the serial).
-      const placed = () => nameNodes(it.name).filter(n => zoneOf(n) === 'offer').length; // both columns are the "offer" zone
-      const placedBefore = placed();
-      // Selected: the card changed (class, a ✓ drawn on it, disabled, gone), or one more of the item is in the offer.
-      const changed = () => placed() > placedBefore || cardsFor(it).length !== beforeCards.length || card.className !== cls
-                            || card.innerHTML !== html || !document.contains(card) || disabled(card);
-      // Waits up to `ms` for the click to show (the page can be slow): a second click too early would take the item back out.
-      const shows = async ms => { for (const until = Date.now() + ms; Date.now() < until; await sleep(150)) if (changed()) return true; return changed(); };
-      if (!clickCard(card, false)) { R.blocked = (R.blocked || []).concat(label(it)); R.missing.push(label(it)); continue; }
-      let ok = await shows(4000);
-      // A second (pointer/mouse) click only when nothing at all changed: on the real page a second click takes the item
-      // back out of the offer.
-      if (!ok && !changed()) { clickCard(card, true); ok = await shows(4000); }
-      taken.add(card);
-      for (const c of cardsFor(it)) if (!beforeCards.includes(c)) taken.add(c);
-      (ok ? R.selected : R.unconfirmed).push(label(it));
+      const k = side + '|' + norm(it.name);
+      if (!groups.has(k)) groups.set(k, { side, items: [] });
+      groups.get(k).items.push(it);
     }
-    for (const input of searched) if (document.contains(input) && input.value) setInput(input, '');
+    const status = new Map(); // label -> last outcome (missing, ambiguous, held, unconfirmed, blocked)
+    const confirmed = new Map(); // without titles: how many copies of each group were seen selected
+
+    // One copy: find a free card, click it, and wait for the item to show in its column. A click that changed nothing
+    // (the page answers a card only a moment after drawing it) is repeated; a card already chosen is never clicked.
+    async function selectOne(it, side) {
+      const r = await find(it, side, taken);
+      if (!r.card) return r.chosen ? 'chosen' : r.count > 1 ? 'ambiguous' : r.held ? 'held' : 'missing';
+      const card = r.card, root = rootOf(card), before = canVerify ? placedOf(it, side) : 0;
+      const shot = () => (root.className || '') + '|' + root.innerHTML;
+      const isIn = () => canVerify ? placedOf(it, side) > before : blockedCard(card) || !document.contains(card);
+      taken.add(card);
+      for (let attempt = 0; attempt < 3 && !late(); attempt++) {
+        if (blockedCard(card) && attempt > 0) break; // the page marked it chosen: wait for the column, never click again
+        const s0 = shot();
+        if (!clickCard(card, attempt === 2)) return 'blocked';
+        if (await until(isIn, 5000)) return 'ok';
+        if (!document.contains(card)) break;
+        if (shot() !== s0 && blockedCard(card)) break; // chosen, the column is slow
+      }
+      if (await until(isIn, 4000)) return 'ok';
+      return 'unconfirmed';
+    }
+
+    for (let round = 0; round < 3 && !late(); round++) {
+      let tried = false;
+      for (const g of groups.values()) {
+        const placed = canVerify ? Math.min(placedOf(g.items[0], g.side), g.items.length) : (confirmed.get(g) || 0);
+        for (const it of g.items.slice(placed)) {
+          if (late()) break;
+          tried = true;
+          const res = await selectOne(it, g.side);
+          if (res === 'ok' || res === 'chosen') { confirmed.set(g, (confirmed.get(g) || 0) + 1); status.delete(label(it)); }
+          else status.set(label(it), res);
+          await clearSearches();
+        }
+      }
+      if (!tried || !canVerify) break;
+      await settle(3000); // let the columns catch up before checking again
+    }
+
+    // The report is what is really in the trade (or, without the columns, what was seen selected).
+    for (const g of groups.values()) {
+      const placed = canVerify ? Math.min(placedOf(g.items[0], g.side), g.items.length) : Math.min(confirmed.get(g) || 0, g.items.length);
+      g.items.forEach((it, i) => {
+        if (i < placed) { R.selected.push(label(it)); return; }
+        const st = status.get(label(it)) || 'unconfirmed';
+        if (st === 'ambiguous') R.ambiguous.push(label(it));
+        else if (st === 'missing' || st === 'held' || st === 'blocked') R.missing.push(label(it));
+        else R.unconfirmed.push(label(it));
+        if (st === 'held') R.notes.push(label(it) + ' está em retenção (o Roblox ainda não deixa trocar)');
+      });
+    }
+    if (late()) R.notes.push('tempo esgotado');
+    await clearSearches();
     R.notes = [...new Set(R.notes)];
     if (R.missing.length || R.ambiguous.length || R.unconfirmed.length) R.structure = structure();
   } catch (e) {

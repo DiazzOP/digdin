@@ -22,8 +22,8 @@ internal static class TradeAssist
     /// <param name="PageReplaced">The page was reloaded or left while the script ran (for "open", usually the trade opening).</param>
     public sealed record Run(TradeAssistResult? Result, string? Failure, bool PageReplaced = false);
 
-    /// <summary>The app waits this long; the script stops itself after 150 s.</summary>
-    public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(180);
+    /// <summary>The app waits this long; the script stops itself after 240 s.</summary>
+    public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(270);
 
     public static async Task<Run> RunAsync(SessionTab tab, TradeAssistPlan plan)
     {

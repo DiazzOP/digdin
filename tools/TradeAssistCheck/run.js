@@ -26,19 +26,39 @@ const src = fs.readFileSync(process.argv[2], 'utf8');
     { file: 'mock-real.html', mode: 'search', plan: { give: [{name:'Camo Commando',serial:2710},{name:'Black Headphones',serial:null}], ask: [{name:'Bighead',serial:null}], self:['fonte_beta','Beta'], partner:['altconta18','sigma2'] } },
     // Page arrows that answer pointer events only.
     { file: 'mock-real.html', mode: 'pointer', plan: { give: [{name:'Old Hat',serial:null}], ask: [], self:['fonte_beta','Beta'], partner:['altconta18','sigma2'] } },
+    // The real page of 26/11 (E062, built from trade-pagina.txt): late-answering cards, pictures that load by themselves,
+    // held copies, the Fedora on page 2, and the request already holding the Small (pre=1: "Abrir de novo").
+    { file: 'mock-real3.html', mode: 'real3', query: '&pre=1', want: { offer: ['Green Ultimate Dragon Face','Snow Leopard Fedora','Souvenir Egg'], request: ['Supersonic Egg'] },
+      plan: { give: [{name:'Green Ultimate Dragon Face',serial:null},{name:'Snow Leopard Fedora',serial:null},{name:'Souvenir Egg',serial:null}], ask: [{name:'Supersonic Egg',serial:null}], self:['fonte_beta','Beta'], partner:['altconta73','sigma6'] } },
+    { file: 'mock-real3.html', mode: 'real3', want: { offer: ['Green Ultimate Dragon Face','Snow Leopard Fedora','Souvenir Egg'], request: ['Supersonic Egg'] },
+      plan: { give: [{name:'Green Ultimate Dragon Face',serial:null},{name:'Snow Leopard Fedora',serial:null},{name:'Souvenir Egg',serial:null}], ask: [{name:'Supersonic Egg',serial:null}], self:['fonte_beta','Beta'], partner:['altconta73','sigma6'] } },
+    // "Abrir de novo" with a Limited already in the offer: it must not be clicked (that would take it out).
+    { file: 'mock-real3.html', mode: 'real3', query: '&pre=2', want: { offer: ['Green Ultimate Dragon Face','Souvenir Egg'], request: ['Supersonic Egg'] },
+      plan: { give: [{name:'Green Ultimate Dragon Face',serial:null},{name:'Souvenir Egg',serial:null}], ask: [{name:'Supersonic Egg',serial:null}], self:['fonte_beta','Beta'], partner:['altconta73','sigma6'] } },
+    // Only held copies of an item ("Em retenção"): not clicked, reported as held.
+    { file: 'mock-real3.html', mode: 'real3', want: { offer: ['Inkwell Egg'], request: [] },
+      plan: { give: [{name:'Quadri-Skull Aura',serial:null},{name:'Inkwell Egg',serial:null}], ask: [], self:['fonte_beta','Beta'], partner:['altconta73','sigma6'] } },
     // A page that selects on mousedown only.
     { mode: 'mousedown', plan: { give: [{name:'Sword',serial:3}], ask: [], self:'fonte_beta', partner:'altconta18' } },
   ];
   for (const c of cases) {
     const page = await browser.newPage();
-    await page.goto('file://' + process.cwd() + '/' + (c.file || 'mock.html') + '?mode=' + c.mode);
+    await page.goto('file://' + process.cwd() + '/' + (c.file || 'mock.html') + '?mode=' + c.mode + (c.query || ''));
     await page.evaluate(src.replace('__PLAN__', JSON.stringify(c.plan)));
-    await page.waitForFunction(() => window.__rbxswAssist && window.__rbxswAssist.state === 'done', null, { timeout: 60000 });
+    await page.waitForFunction(() => window.__rbxswAssist && window.__rbxswAssist.state === 'done', null, { timeout: 260000 });
     const r = await page.evaluate(() => ({ ...window.__rbxswAssist, sent: !!window.sent, clicks: window.clicks, url: location.href,
-      offer: [...document.querySelectorAll('#offer .item-card-name, #offer .name')].map(e=>e.textContent + (e.nextSibling ? e.nextSibling.textContent : '')),
-      request: [...document.querySelectorAll('#request .item-card-name, #request .name')].map(e=>e.textContent + (e.nextSibling ? e.nextSibling.textContent : '')) }));
+      offer: [...document.querySelectorAll('#offer .item-card-name, #offer .name, #offer .item-name a')].map(e=>e.textContent + (e.nextSibling ? e.nextSibling.textContent : '')),
+      request: [...document.querySelectorAll('#request .item-card-name, #request .name, #request .item-name a')].map(e=>e.textContent + (e.nextSibling ? e.nextSibling.textContent : '')) }));
     const { structure, ...rest } = r;
     console.log(c.mode, JSON.stringify(rest));
+    if (!c.want && r.selected.length !== r.offer.length + r.request.length) console.log('  FALHA · relatou ' + r.selected.length + ' selecionados, a trade tem ' + (r.offer.length + r.request.length));
+    if (c.want) {
+      const clean = a => a.map(x => x.replace(/⏣.*$/, '').trim()).sort().join(', ');
+      const okOffer = clean(r.offer) === [...c.want.offer].sort().join(', '), okReq = clean(r.request) === [...c.want.request].sort().join(', ');
+      // What the script says it selected must be what is really there.
+      const honest = r.selected.length === r.offer.length + r.request.length;
+      console.log('  ' + (okOffer && okReq && honest && !r.sent ? 'OK' : 'FALHA') + ' · oferta: ' + clean(r.offer) + ' · pedido: ' + clean(r.request) + ' · relatou ' + r.selected.length + ' selecionados');
+    }
     if (structure) console.log('  structure lines:', structure.split('\n').length, '| sample:', structure.split('\n').filter(l => l.includes('item do plano')).slice(0,2).join(' || '));
     await page.close();
   }

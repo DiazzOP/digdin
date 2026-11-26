@@ -1,0 +1,57 @@
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><style>
+body{font-family:sans-serif;display:flex;gap:40px}ul{display:grid;grid-template-columns:repeat(5,112px);gap:8px;list-style:none;padding:0}
+.item-card-thumb-container{width:112px;height:112px;background:#ccc;position:relative}.is-unavailable{opacity:.5}
+.hold{position:absolute;top:30px;left:10px;color:#fff;background:#008}.trade-request-item{border:1px solid #999;margin:4px;width:300px}
+</style></head><body>
+<!-- Built from trade-pagina.txt (the real page of 24/11/2026): li.trade-item-card > div.trade-inventory-card[role=button] >
+     a.item-card-link (thumbnail + caption); "Página N" between buttons "Voltar"/"Próximo"; a "Pesquisar" button opening an
+     input; "Sua oferta" / "Seu pedido" columns with a "Remover X" button per item. What makes it hard, as the real page:
+     a card answers clicks only 1.2 s after it is drawn, its picture loads by itself (the card changes without a click),
+     the item shows in the offer 0.8 s after the click, a second click takes it back out, held copies ("Em retenção")
+     do nothing, and with ?pre=1 the request already holds an item when the page opens. -->
+<main class="trade-request-window-body">
+<div class="inventory-panel-holder" id="mine"><div class="trade-inventory-panel"><h2 class="inventory-label">Seu inventário</h2>
+  <div class="inventory-filter-row"><button type="button">Tudo</button><div class="inventory-search"><button type="button" aria-label="Pesquisar">🔍</button></div></div>
+  <div><ul class="hlist item-cards"></ul><div class="trade-inventory-pager"><button type="button" aria-label="Voltar">‹</button><span class="trade-inventory-pager-label">Página 1</span><button type="button" aria-label="Próximo">›</button></div></div></div></div>
+<div class="trade-request-window-offer" id="offercol"><h2>Sua oferta</h2><div id="offer"></div><input type="text" placeholder="Adicionar mais Robux"><div>Valor total: 0</div></div>
+<div class="inventory-panel-holder" id="theirs"><div class="trade-inventory-panel"><h2 class="inventory-label">Inventário de sigma6</h2>
+  <div class="inventory-filter-row"><button type="button">Tudo</button><div class="inventory-search"><button type="button" aria-label="Pesquisar">🔍</button></div></div>
+  <div><ul class="hlist item-cards"></ul><div class="trade-inventory-pager"><button type="button" aria-label="Voltar">‹</button><span class="trade-inventory-pager-label">Página 1</span><button type="button" aria-label="Próximo">›</button></div></div></div></div>
+<div class="trade-request-window-offer" id="requestcol"><h2>Seu pedido</h2><div id="request"></div><button type="button" id="send" onclick="window.sent=true">Fazer oferta</button></div>
+</main>
+<script>
+window.clicks=[];
+const Q=new URLSearchParams(location.search), PER=10;
+// [name, serial, rap, held]
+const lists={mine:[['Green Ultimate Dragon Face',27865,1470],['Quadri-Skull Aura',1151874,1779,1],['Quadri-Skull Aura',458397,1779,1],['Quadri-Skull Aura',387627,1779,1],
+  ['Inkwell Egg',null,233],['Souvenir Egg',null,229,1],['Souvenir Egg',null,229],['Souvenir Egg',null,229],['Souvenir Egg',null,229],['Tiny Tank Egg',null,181],
+  ['Saber Boss Egg',null,211],['Snow Leopard Fedora',null,1725],['Deteggctive W. Wolf',null,196]],
+  theirs:[['Atomic Blue Hairdo',null,3492],['Camo Commando',2710,3051],['Supersonic Egg',null,226]]};
+const state={mine:{page:0,q:'',sel:new Set()},theirs:{page:0,q:'',sel:new Set()}};
+function addToOffer(side,i){const [n,,rap]=lists[side][i];state[side].sel.add(i);
+  setTimeout(()=>{if(!state[side].sel.has(i))return;const d=document.createElement('div');d.dataset.i=side+i;
+    d.innerHTML='<div class="trade-request-item"><button type="button" aria-label="Remover '+n+'">x</button><div class="item-name" title="'+n+'"><span><a>'+n+'</a></span></div><div>⏣'+rap+'</div></div>';
+    d.querySelector('button').onclick=()=>{window.clicks.push('X:'+n);remove(side,i)};
+    document.getElementById(side==='mine'?'offer':'request').appendChild(d);render(side)},800)}
+function remove(side,i){state[side].sel.delete(i);document.querySelector('[data-i="'+side+i+'"]')?.remove();render(side)}
+function render(side){const st=state[side],panel=document.getElementById(side),ul=panel.querySelector('ul');ul.innerHTML='';
+  const all=lists[side].map((x,i)=>[x[0],x[1],x[2],!!x[3],i]).filter(x=>!st.q||x[0].toLowerCase().includes(st.q));
+  all.slice(st.page*PER,st.page*PER+PER).forEach(([n,ser,rap,held,i])=>{const li=document.createElement('li');li.className='list-item item-card trade-item-card';
+    const sel=st.sel.has(i);
+    li.innerHTML='<div class="trade-inventory-card'+(sel||held?' is-unavailable':'')+'" role="button"><div class="item-card-container"><a class="item-card-link" href="https://example.invalid/catalog/'+i+'">'+
+      '<div class="item-card-thumb-container"><span class="thumbnail-2d-container shimmer"></span>'+(ser?'<span>#'+ser+'</span>':'')+(held?'<b class="hold">Em retenção</b>':'')+(sel?'<div class="item-card-equipped">✔</div>':'')+'</div>'+
+      '<div class="item-card-caption"><div class="item-card-name-link"><div class="item-card-name" title="'+n+'">'+n+'</div></div><div>⏣'+rap+'</div></div></a></div></div>';
+    const card=li.firstChild;let live=false;setTimeout(()=>live=true,1200); // answers clicks only 1.2 s after it is drawn
+    setTimeout(()=>{const t=li.querySelector('.thumbnail-2d-container');if(t){t.classList.remove('shimmer');t.innerHTML='<img width=100 height=100>'}},300); // the picture loads by itself
+    card.addEventListener('click',()=>{window.clicks.push((live?'':'DEAD:')+side+':'+n);if(!live||held)return;
+      if(st.sel.has(i))remove(side,i);else{addToOffer(side,i);card.classList.add('is-unavailable')}});
+    ul.appendChild(li)});
+  panel.querySelector('.trade-inventory-pager-label').textContent='Página '+(st.page+1);
+  const [prev,next]=panel.querySelectorAll('.trade-inventory-pager button');prev.disabled=st.page===0;next.disabled=(st.page+1)*PER>=all.length}
+for(const side of ['mine','theirs']){const panel=document.getElementById(side),st=state[side],[prev,next]=panel.querySelectorAll('.trade-inventory-pager button');
+  next.onclick=()=>{st.page++;panel.querySelector('.trade-inventory-pager-label').textContent='Página '+(st.page+1);setTimeout(()=>render(side),900)};
+  prev.onclick=()=>{st.page=Math.max(0,st.page-1);panel.querySelector('.trade-inventory-pager-label').textContent='Página '+(st.page+1);setTimeout(()=>render(side),900)};
+  panel.querySelector('.inventory-search button').onclick=()=>{if(panel.querySelector('.inventory-search input'))return;const inp=document.createElement('input');inp.type='text';inp.placeholder='Pesquisar';
+    panel.querySelector('.inventory-search').appendChild(inp);inp.addEventListener('input',()=>{clearTimeout(inp.t);inp.t=setTimeout(()=>{st.q=inp.value.toLowerCase();st.page=0;render(side)},700)})}}
+setTimeout(()=>{render('mine');render('theirs');if(Q.get('pre')==='1')addToOffer('theirs',2);if(Q.get('pre')==='2')addToOffer('mine',0)},800);
+</script></body></html>
