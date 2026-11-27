@@ -211,7 +211,7 @@ internal sealed class LimitedsView : Panel
     private bool InFilter(SellRow r, int filter) => filter switch
     {
         1 => r.Situation == SellSituation.Outbid,
-        2 => r.Situation is SellSituation.Ready or SellSituation.Unread,
+        2 => r.Situation is SellSituation.Ready or SellSituation.Unread or SellSituation.NoPlus, // free copies (as in the total)
         3 => r.Situation is SellSituation.Outbid or SellSituation.Lowest or SellSituation.OnSale,
         4 => r.Situation == SellSituation.OnHold,
         5 => r.Situation == SellSituation.Sold,
@@ -243,7 +243,7 @@ internal sealed class LimitedsView : Panel
             _chips[i].Invalidate();
         }
         var copies = visible.Where(r => r.Situation != SellSituation.Sold).ToList();
-        int outbid = copies.Count(r => r.Situation == SellSituation.Outbid), ready = copies.Count(r => r.Situation is SellSituation.Ready or SellSituation.Unread);
+        int outbid = copies.Count(r => r.Situation == SellSituation.Outbid), ready = copies.Count(r => r.Situation is SellSituation.Ready or SellSituation.Unread or SellSituation.NoPlus);
         var onSale = copies.Where(r => r.Situation is SellSituation.Outbid or SellSituation.Lowest or SellSituation.OnSale).ToList();
         int soldToday = visible.Count(r => r.Sale is { } s && Core.Finance.BrasiliaTime.ToBrasilia(s.CreatedUtc).Date == Core.Finance.BrasiliaTime.ToBrasilia(DateTimeOffset.UtcNow).Date);
         _summary.Text = _board.Accounts.Count == 0 ? "Nenhum Limited para vender nas contas lidas. Use \"Atualizar leituras\"."

@@ -148,6 +148,26 @@ public class SellingTests
     }
 
     [Fact]
+    public void A_Small_received_in_a_Distribuir_trade_shows_on_hold_before_the_reads_see_it()
+    {
+        // Kuba got FonteAlfa's Small 30 h ago; Roblox's list leaves held copies out and Rolimons has not caught up.
+        var step = new PlanStep
+        {
+            Id = "E065", State = StepState.Completed, SourceId = PlanFixture.Alfa, DestinationId = PlanFixture.Kuba, CompletedUtc = Now.AddHours(-30),
+            Limiteds = [new(101, 1, "Valk", 1, 2_100)], SourceSmall = new(104, 4, "Epic Egg", 4), DestinationSmall = new(401, 4, "Epic Egg", 1),
+        };
+        var plan = new DistributionPlan { Steps = [step] };
+        var kuba = Input(PlanFixture.Kuba, "altconta72", null);
+        var rows = SellBoard.Build([kuba], PlanFixture.Settings(), PlanFixture.Market, new Dictionary<long, ItemListings>(), plan, Now).Rows;
+        var small = rows.Single(r => r.UserAssetId == 104);
+        Assert.True(small.Small);
+        Assert.Equal(SellSituation.OnHold, small.Situation);
+        Assert.Equal(SellSituation.OnHold, rows.Single(r => r.UserAssetId == 101).Situation);
+        // After the 2-day hold Roblox's own list shows the copies again; nothing is added any more.
+        Assert.Empty(SellBoard.Build([kuba], PlanFixture.Settings(), PlanFixture.Market, new Dictionary<long, ItemListings>(), plan, Now.AddDays(3)).Rows);
+    }
+
+    [Fact]
     public void Each_destination_shows_how_much_it_can_still_receive()
     {
         var s = PlanFixture.Settings((PlanFixture.Kuba, 9_000));

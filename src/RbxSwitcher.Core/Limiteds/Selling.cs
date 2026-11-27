@@ -235,23 +235,13 @@ public static class SellBoard
             // (A failed read of the account's own listings is not shown: "on sale" then comes from the cheapest listings.)
             int before = rows.Count;
 
-            if (a.Inventory is { } inv)
+            // The same Limiteds the Distribuir tab counts: copies a finished trade brought in show (on hold) before the reads
+            // see them — Roblox's list leaves held copies out —, copies it took out go while Rolimons still lists them, and
+            // the account's own copies on the Marketplace, read after the inventory, cap the Rolimons-only ones.
+            if (PlanInventory.For(a.UserId, a.Inventory, input.Listings, plan.Steps, now) is { } inv)
             {
-                var valued = Valuation.Value(inv, s, market);
-                var listed = ListedAmongLowest(a.UserId, valued, listings);
-                var shown = new List<ValuedCopy>();
-                foreach (var item in valued)
-                {
-                    var v = item;
-                    // A copy only Rolimons lists is checked against the account's own copies on the Marketplace, when read:
-                    // none → it already left the account; all held → on hold.
-                    if (v.Copy.FromRolimons && input.Listings is { } own && own.OwnedByItem.TryGetValue(v.Copy.AssetId, out int owned))
-                    {
-                        if (owned == 0) continue;
-                        if (own.HeldByItem.GetValueOrDefault(v.Copy.AssetId) >= owned) v = v with { OnHold = true };
-                    }
-                    shown.Add(v);
-                }
+                var shown = Valuation.Value(inv, s, market);
+                var listed = ListedAmongLowest(a.UserId, shown, listings);
                 // When each held copy leaves the hold (2 days after a trade, 7 after a store purchase).
                 var holds = HoldClock.ForAccount(shown.Where(v => v.OnHold).Select(v => v.Copy), input.Arrivals, accepted, now);
                 foreach (var v in shown)

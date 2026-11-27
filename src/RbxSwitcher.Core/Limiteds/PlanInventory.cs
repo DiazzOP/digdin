@@ -16,8 +16,13 @@ public static class PlanInventory
     /// <summary>Rolimons usually shows a trade within hours; after this its list is trusted again.</summary>
     public static readonly TimeSpan RolimonsLag = TimeSpan.FromDays(2);
 
-    /// <summary>A copy a trade brought in cannot be sold this soon (trade hold): kept while the reads miss it.</summary>
-    public static readonly TimeSpan ArrivalGrace = TimeSpan.FromDays(1);
+    /// <summary>
+    /// A copy a trade brought in is on hold for exactly <see cref="HoldClock.AfterTrade"/>, and Roblox's collectibles
+    /// list leaves held copies out: it is kept for the whole hold (plus slack) while the reads miss it.
+    /// </summary>
+    public static readonly TimeSpan ArrivalGrace = HoldClock.AfterTrade + TimeSpan.FromHours(6);
+
+    private static readonly TimeSpan Window = RolimonsLag > ArrivalGrace ? RolimonsLag : ArrivalGrace;
 
     private readonly record struct Move(bool Into, DateTimeOffset AtUtc, CopyRef Copy);
 
@@ -27,7 +32,7 @@ public static class PlanInventory
 
         // The last move of each copy into or out of this account by a completed step, recent ones only.
         var moves = new Dictionary<long, Move>();
-        foreach (var s in steps.Where(x => x.State == StepState.Completed && x.CompletedUtc is { } c && now - c <= RolimonsLag
+        foreach (var s in steps.Where(x => x.State == StepState.Completed && x.CompletedUtc is { } c && now - c <= Window
                                             && (x.SourceId == userId || x.DestinationId == userId))
                                .OrderBy(x => x.CompletedUtc))
         {
@@ -43,7 +48,7 @@ public static class PlanInventory
         foreach (var c in inv.Copies)
         {
             // Left in a completed trade; Rolimons has not caught up yet.
-            if (c.FromRolimons && moves.TryGetValue(c.UserAssetId, out var m) && !m.Into) { changed = true; continue; }
+            if (c.FromRolimons && moves.TryGetValue(c.UserAssetId, out var m) && !m.Into && now - m.AtUtc <= RolimonsLag) { changed = true; continue; }
             copies.Add(c);
         }
 
