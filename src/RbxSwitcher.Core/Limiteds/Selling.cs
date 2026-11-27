@@ -151,6 +151,10 @@ public sealed record SellAccount(long UserId, string Username, string Title, str
     public bool CanSell => Plus is PlusLabel.Active or PlusLabel.Trial;
     /// <summary>Robux of sales still pending in the account (already net of the fee).</summary>
     public long? Pending { get; init; }
+    /// <summary>How much net it can still receive (the Distribuir tab's space, after the trades in progress); null when blocked.</summary>
+    public long? Space { get; init; }
+    /// <summary>Why it cannot receive now (first reason), when <see cref="Space"/> is null.</summary>
+    public string? SpaceBlock { get; init; }
     public bool HasQuotaNow => RemainingMonthly is > 0;
 }
 
@@ -221,6 +225,13 @@ public static class SellBoard
             var next = q?.MonthlyReleases.Where(r => r.AtUtc > now).OrderBy(r => r.AtUtc).FirstOrDefault();
             var account = new SellAccount(a.UserId, a.Username, input.Title, a.Group, s.SourceAccounts.Contains(a.UserId), plus, q?.RemainingMonthly,
                 q?.EffectiveMonthly, next is { } n ? (n.Amount, n.AtUtc) : null, InventoryProblem(a), a.Inventory?.ReadUtc) { Pending = f?.PendingRobux };
+            // How much it can still receive in a trade (the same space the Distribuir tab uses); not for the sources.
+            if (!account.Source && !a.SessionOk) account = account with { SpaceBlock = "sessão expirada" };
+            else if (!account.Source)
+            {
+                var space = Planner.Space(a, s, market, now, Planner.Committed(plan, a.UserId), out var view);
+                account = account with { Space = space, SpaceBlock = space is null ? view.Blocks.FirstOrDefault() : null };
+            }
             // (A failed read of the account's own listings is not shown: "on sale" then comes from the cheapest listings.)
             int before = rows.Count;
 

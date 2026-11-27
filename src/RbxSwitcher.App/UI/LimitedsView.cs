@@ -314,6 +314,8 @@ internal sealed class LimitedsView : Panel
             {
                 int i = _list.Rows.Add("", "", "", "", "", "", "");
                 _list.Rows[i].Height = LogicalToDeviceUnits(l.Header ? 34 : 50);
+                if (l.Header && l.Account is { } acc)
+                    foreach (DataGridViewCell cell in _list.Rows[i].Cells) cell.ToolTipText = AccountTip(acc);
             }
             int index = Array.FindIndex(_lines, l => l.Key == keep);
             if (index < 0) index = Array.FindIndex(_lines, l => !l.Header);
@@ -322,6 +324,15 @@ internal sealed class LimitedsView : Panel
         }
         finally { _updating = false; }
         OnCurrentChanged();
+    }
+
+    /// <summary>What the header's "Limiteds" and "pode receber" mean, for a trade made by hand.</summary>
+    private static string AccountTip(SellAccount a)
+    {
+        var tip = "Limiteds: líquido dos Limiteds na conta agora, em holding inclusos (sem Smalls).";
+        if (a.Source) return tip;
+        return tip + "\nPode receber: cota de 30 dias (ou a meta da conta) menos saldo, pendentes, Limiteds e trades em andamento — o mesmo espaço da Distribuir."
+            + (a.Space is null && a.SpaceBlock is { } why ? "\nNão pode receber agora: " + why + "." : "");
     }
 
     private SellRow? RowAt(int index) => index >= 0 && index < _lines.Length ? _lines[index].Row : null;
@@ -405,6 +416,11 @@ internal sealed class LimitedsView : Panel
             Text(a.Title, Theme.Bold, Theme.Text);
             Text("  @" + a.Username, Theme.Small, Theme.TextDim);
             if (a.Source) Text("  · origem", Theme.Small, Theme.TextDim);
+            // What the account holds (net, Smalls aside) and how much more it can receive — for a trade by hand.
+            long held = _board.Rows.Where(rw => rw.AccountId == a.UserId && !rw.Small && rw.Situation != SellSituation.Sold).Sum(rw => rw.Net ?? 0);
+            Text("  ·  Limiteds ≈ " + Fmt.N(held), Theme.Small, Theme.Text);
+            if (!a.Source)
+                Text(a.Space is { } room ? "  ·  pode receber ≈ " + Fmt.N(room) : "  ·  não pode receber", Theme.Small, a.Space is > 0 ? Theme.Valid : Theme.WarnInk);
             string quota = a.RemainingMonthly is { } rem ? $"cota 30 dias {Fmt.N(rem)}" + (a.MonthlyCap is { } cap ? $" de {Fmt.N(cap)}" : "") : "cota não lida";
             if (a.RemainingMonthly is <= 0 && a.NextRelease is { } next) quota += $" · libera {Fmt.N(next.Amount)} em {Fmt.ShortDay(next.AtUtc)}";
             Text("  ·  " + quota, Theme.Small, a.RemainingMonthly is <= 0 ? Theme.WarnInk : Theme.Text2);

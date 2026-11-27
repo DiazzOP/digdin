@@ -148,6 +148,30 @@ public class SellingTests
     }
 
     [Fact]
+    public void Each_destination_shows_how_much_it_can_still_receive()
+    {
+        var s = PlanFixture.Settings((PlanFixture.Kuba, 9_000));
+        var alfa = new SellInput(PlanFixture.Acc(PlanFixture.Alfa, "FonteAlfa", null, C(1, 1, "Valk", 3_000)), "Alfa", null, null);
+        var kuba = Input(PlanFixture.Kuba, "altconta72", null, C(201, 6, "Hat", 1_000));
+        var expired = Input(PlanFixture.Lua, "altconta73", null, C(301, 6, "Hat", 1_000));
+        expired = expired with { Snapshot = expired.Snapshot with { SessionOk = false } };
+        // A trade already sent to Kuba counts against its space, as in the Distribuir tab.
+        var plan = new DistributionPlan { Steps = [new PlanStep { Id = "E001", State = StepState.Sent, DestinationId = PlanFixture.Kuba, Limiteds = [new(9, 1, "Valk", 3, 700)] }] };
+        var board = SellBoard.Build([alfa, kuba, expired], s, PlanFixture.Market, new Dictionary<long, ItemListings>(), plan, Now);
+
+        var expected = Planner.Space(kuba.Snapshot, s, PlanFixture.Market, Now, 700, out _);
+        Assert.NotNull(expected);
+        var dest = board.Accounts.Single(x => x.UserId == PlanFixture.Kuba);
+        Assert.Equal(expected, dest.Space);
+        Assert.Null(dest.SpaceBlock);
+        var source = board.Accounts.Single(x => x.UserId == PlanFixture.Alfa);
+        Assert.True(source.Source);
+        Assert.Null(source.Space);
+        var lua = board.Accounts.Single(x => x.UserId == PlanFixture.Lua);
+        Assert.Equal((null, "sessão expirada"), (lua.Space, lua.SpaceBlock));
+    }
+
+    [Fact]
     public void Accounts_without_Plus_cannot_sell_and_accounts_without_anything_are_left_out()
     {
         var s = PlanFixture.Settings();

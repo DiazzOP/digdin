@@ -26,7 +26,7 @@ confirma no Roblox.
 Colunas: meu preço, menor preço de **outro** vendedor (se for outra conta sua: "sua @conta"), RAP · vendas por dia,
 líquido (do seu preço; "≈" = pela sugestão).
 
-Cabeçalho de cada conta: cota de 30 dias, quanto libera e quando (quando está zerada), Plus. Sem cota, o detalhe avisa:
+Cabeçalho de cada conta: líquido dos Limiteds que estão na conta ("Limiteds ≈", holding incluso, sem Smalls), quanto a conta ainda pode receber ("pode receber ≈", só nas não-origens: o espaço da Distribuir — cota de 30 dias ou meta, menos saldo, pendentes, Limiteds e trades em andamento), cota de 30 dias, quanto libera e quando (quando está zerada), Plus. Sem cota, o detalhe avisa:
 "o Robux da venda fica parado até dd/mm" — é aviso, não bloqueio.
 
 ## Sugestão de preço
